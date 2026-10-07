@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Avatar, Box, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
+import { Avatar, Box, DropdownMenu, Flex, IconButton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import {
   BarChartIcon, CalendarIcon, ChatBubbleIcon, ClockIcon, DashboardIcon, FileTextIcon, GearIcon,
-  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, PersonIcon, SunIcon,
+  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, ExitIcon, PersonIcon, SunIcon,
 } from "@radix-ui/react-icons";
-import { ROLE_LABEL, useRole } from "@/lib/client";
+import { ROLE_LABEL, useAuth } from "@/lib/client";
 import { useThemeMode, type ThemeMode } from "./AppTheme";
 import type { Role } from "@/lib/types";
 
@@ -31,15 +31,30 @@ const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[] }
 
 const THEME_ICON: Record<ThemeMode, React.ReactNode> = { light: <SunIcon />, dark: <MoonIcon />, system: <DesktopIcon /> };
 
-const USER: Record<Role, { name: string; org?: string }> = {
-  super_admin: { name: "Priya Shah" },
-  coordinator: { name: "Tom Reed" },
-  client_admin: { name: "Helen Ward", org: "Oakwood Care" },
-};
+const PUBLIC_PATHS = ["/login"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { role, setRole } = useRole();
   const path = usePathname();
+  const router = useRouter();
+  const { user, status, logout } = useAuth();
+  const isPublic = PUBLIC_PATHS.includes(path);
+
+  // Signed-out users go to the login page, then come back to where they were.
+  useEffect(() => {
+    if (status === "signed-out" && !isPublic) router.replace(`/login?next=${encodeURIComponent(path)}`);
+  }, [status, isPublic, path, router]);
+
+  if (isPublic) return <>{children}</>;
+  if (!user) {
+    return <Flex align="center" justify="center" minHeight="100vh"><Spinner size="3" /></Flex>;
+  }
+  return <SignedInShell user={user} path={path} onLogout={logout}>{children}</SignedInShell>;
+}
+
+function SignedInShell({ user, path, onLogout, children }: {
+  user: NonNullable<ReturnType<typeof useAuth>["user"]>; path: string; onLogout: () => Promise<void>; children: React.ReactNode;
+}) {
+  const role = user.role;
   const [open, setOpen] = useState(false); // mobile drawer
   const [collapsed, setCollapsed] = useState(false); // desktop icon-only rail
   const { mode, setMode, brand } = useThemeMode();
@@ -82,20 +97,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Box mt="auto" pt="3" style={{ borderTop: "1px solid var(--gray-a5)" }}>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
-                  <button className="navlink profile" aria-label="Account, role and theme">
-                    <Avatar size="2" radius="full" fallback={USER[role].name.split(" ").map((p) => p[0]).join("")} />
+                  <button className="navlink profile" aria-label="Account and theme">
+                    <Avatar size="2" radius="full" fallback={user.name.split(" ").map((p) => p[0]).slice(0, 2).join("")} />
                     <span className="label" style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                      <Text as="div" size="2" weight="medium" truncate>{USER[role].name}</Text>
-                      <Text as="div" size="1" color="gray" truncate>{ROLE_LABEL[role]}{USER[role].org && ` · ${USER[role].org}`}</Text>
+                      <Text as="div" size="2" weight="medium" truncate>{user.name}</Text>
+                      <Text as="div" size="1" color="gray" truncate>{ROLE_LABEL[role]}</Text>
                     </span>
                     <span className="label">{THEME_ICON[mode]}</span>
                   </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content side="top" align="start" style={{ minWidth: 220 }}>
-                  <DropdownMenu.Label>View as (demo)</DropdownMenu.Label>
-                  <DropdownMenu.RadioGroup value={role} onValueChange={(r) => setRole(r as Role)}>
-                    {ALL.map((r) => <DropdownMenu.RadioItem key={r} value={r}>{ROLE_LABEL[r]}</DropdownMenu.RadioItem>)}
-                  </DropdownMenu.RadioGroup>
+                  <DropdownMenu.Label>{user.email}</DropdownMenu.Label>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Label>Theme</DropdownMenu.Label>
                   <DropdownMenu.RadioGroup value={mode} onValueChange={(m) => setMode(m as ThemeMode)}>
@@ -103,6 +115,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     <DropdownMenu.RadioItem value="dark"><MoonIcon /> Dark</DropdownMenu.RadioItem>
                     <DropdownMenu.RadioItem value="system"><DesktopIcon /> System</DropdownMenu.RadioItem>
                   </DropdownMenu.RadioGroup>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item color="red" onSelect={() => onLogout()}><ExitIcon /> Sign out</DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Box>

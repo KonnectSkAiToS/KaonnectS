@@ -10,9 +10,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const u = db.users.find((x) => x.id === id);
   if (!u) return fail(404, "User not found");
-  const b = await body<{ role?: Role; clientIds?: string[]; status?: User["status"]; resendInvite?: boolean }>(req);
+  const b = await body<{ name?: string; email?: string; role?: Role; clientIds?: string[]; status?: User["status"]; resendInvite?: boolean }>(req);
 
-  if (u.id === c.user.id && (b.role || b.status === "deactivated")) return fail(409, "You can't change your own role or deactivate yourself");
+  if (b.name !== undefined && !b.name.trim()) return fail(400, "Name can't be empty");
+  if (b.email !== undefined) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.email)) return fail(400, "Enter a valid email");
+    if (db.users.some((x) => x.id !== u.id && x.email.toLowerCase() === b.email!.toLowerCase())) return fail(409, "Another user already has that email");
+  }
+  if (u.id === c.user.id && ((b.role && b.role !== u.role) || b.status === "deactivated")) return fail(409, "You can't change your own role or deactivate yourself");
   const role = b.role ?? u.role;
   if (!ROLES.includes(role)) return fail(400, "Unknown role");
   if (b.status && !["active", "deactivated"].includes(b.status)) return fail(400, "Status must be active or deactivated");
@@ -30,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     audit(c.user.name, "user.invite_resent", u.email);
     return ok(u);
   }
-  Object.assign(u, { role, clientIds, status: b.status ?? u.status });
+  Object.assign(u, { name: b.name?.trim() ?? u.name, email: b.email?.trim() ?? u.email, role, clientIds, status: b.status ?? u.status });
   audit(c.user.name, "user.updated", `${u.name} · ${role}${b.status ? ` · ${b.status}` : ""}`);
   return ok(u);
 }

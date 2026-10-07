@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@radix-ui/themes/styles.css";
 import "./globals.css";
 import { db } from "@/lib/data";
-import { RoleProvider } from "@/lib/client";
+import { AuthProvider } from "@/lib/client";
 import { Shell } from "@/components/Shell";
 import { AppTheme, THEME_SCRIPT, type Brand } from "@/components/AppTheme";
 
@@ -24,9 +24,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body>
         <AppTheme initialBrand={brand}>
-          <RoleProvider>
+          <AuthProvider>
             <Shell>{children}</Shell>
-          </RoleProvider>
+          </AuthProvider>
         </AppTheme>
       </body>
     </html>

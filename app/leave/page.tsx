@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge, Button, Callout, Card, Dialog, Flex, Select, Table, Tabs, Text, TextField } from "@radix-ui/themes";
 import { InfoCircledIcon, PlusIcon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
 import { ApiError, fmtDate, useApi, useRole, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
 import type { ContractType, LeaveBalance, LeaveRequest, LeaveType, Worker } from "@/lib/types";
@@ -183,10 +184,8 @@ function RecordLeave({ onSaved }: { onSaved: () => void }) {
           <Flex direction="column" gap="3">
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Worker</Text>
-              <Select.Root value={f.workerId} onValueChange={(workerId) => set({ workerId })}>
-                <Select.Trigger placeholder="Choose worker" style={{ width: "100%" }} />
-                <Select.Content>{workers?.map((w) => <Select.Item key={w.id} value={w.id}>{w.name} ({w.contractType})</Select.Item>)}</Select.Content>
-              </Select.Root>
+              <SearchSelect noun="worker" placeholder="Choose worker" value={f.workerId} onChange={(workerId) => set({ workerId })}
+                options={workers?.map((w) => ({ id: w.id, label: w.name, hint: w.contractType })) ?? []} />
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Type</Text>

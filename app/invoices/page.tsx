@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, Card, Dialog, Flex, Grid, Select, Table, Text, TextField } from "@radix-ui/themes";
 import { PlusIcon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
 import { ApiError, fmtDate, fmtMoney, useApi, useRole, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, InvoiceBadge, Load, PageHeader } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
@@ -126,10 +127,8 @@ function GenerateInvoice({ onCreated }: { onCreated: (id: string) => void }) {
         <Dialog.Description size="2" color="gray" mb="4">Bills approved timesheets in the period that haven't been invoiced yet, at the client's bill rate plus 20% VAT. It's saved as a draft for you to check before issuing.</Dialog.Description>
         <ErrorCallout error={error} />
         <Flex direction="column" gap="3">
-          <Select.Root value={f.clientId} onValueChange={(clientId) => set({ clientId })}>
-            <Select.Trigger placeholder="Choose client" />
-            <Select.Content>{clients?.map((c) => <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>)}</Select.Content>
-          </Select.Root>
+          <SearchSelect noun="client" placeholder="Choose client" value={f.clientId} onChange={(clientId) => set({ clientId })}
+            options={clients?.map((c) => ({ id: c.id, label: c.name, hint: c.sector })) ?? []} />
           <Flex gap="3">
             <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">From</Text><TextField.Root type="date" value={f.from} onChange={(e) => set({ from: e.target.value })} /></label>
             <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">To</Text><TextField.Root type="date" value={f.to} min={f.from} onChange={(e) => set({ to: e.target.value })} /></label>

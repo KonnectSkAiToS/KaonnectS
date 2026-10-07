@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Button, Checkbox, Dialog, Flex, Select, Text, TextField } from "@radix-ui/themes";
 import { PlusIcon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
 import { ApiError, useApi, useSend } from "@/lib/client";
 import { ErrorCallout } from "@/components/ui";
 import type { Client, Site, Skill } from "@/lib/types";
@@ -46,10 +47,8 @@ export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
           <Flex direction="column" gap="3">
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Site</Text>
-              <Select.Root value={f.siteId} onValueChange={(siteId) => set({ siteId, role: "" })}>
-                <Select.Trigger placeholder="Choose site" style={{ width: "100%" }} />
-                <Select.Content>{sites.map((s) => <Select.Item key={s.id} value={s.id}>{s.name}</Select.Item>)}</Select.Content>
-              </Select.Root>
+              <SearchSelect noun="site" placeholder="Choose site" value={f.siteId} onChange={(siteId) => set({ siteId, role: "" })}
+                options={clients?.flatMap((c) => c.sites.map((s) => ({ id: s.id, label: s.name, hint: c.name }))) ?? []} />
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Role</Text>

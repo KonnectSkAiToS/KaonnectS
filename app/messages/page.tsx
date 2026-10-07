@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Avatar, Badge, Box, Button, Card, Dialog, Flex, IconButton, Select, Text, TextArea, TextField } from "@radix-ui/themes";
+import { Avatar, Badge, Box, Button, Card, Dialog, Flex, IconButton, Text, TextArea, TextField } from "@radix-ui/themes";
 import { ArrowLeftIcon, MagnifyingGlassIcon, PaperPlaneIcon, Pencil2Icon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
 import { ApiError, fmtDate, fmtTime, useApi, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, Loading, PageHeader } from "@/components/ui";
 import type { Conversation, Message, ShiftView, Worker } from "@/lib/types";
@@ -187,10 +188,8 @@ function NewConversation({ onCreated }: { onCreated: (id: string) => void }) {
         <ErrorCallout error={error} />
         <form onSubmit={submit}>
           <Flex direction="column" gap="3">
-            <Select.Root value={f.workerId} onValueChange={(workerId) => setF({ ...f, workerId })}>
-              <Select.Trigger placeholder="Choose worker" />
-              <Select.Content>{workers?.map((w) => <Select.Item key={w.id} value={w.id}>{w.name}</Select.Item>)}</Select.Content>
-            </Select.Root>
+            <SearchSelect noun="worker" placeholder="Choose worker" value={f.workerId} onChange={(workerId) => setF({ ...f, workerId })}
+              options={workers?.map((w) => ({ id: w.id, label: w.name, hint: w.skills.join(", ") })) ?? []} />
             <TextField.Root placeholder="Subject" value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} />
             <TextArea placeholder="Message" rows={4} maxLength={2000} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} />
           </Flex>

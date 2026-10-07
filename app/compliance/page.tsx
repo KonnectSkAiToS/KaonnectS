@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge, Button, Callout, Card, Checkbox, DataList, Dialog, Flex, Select, Table, Tabs, Text, TextField } from "@radix-ui/themes";
 import { EyeOpenIcon, FileTextIcon, InfoCircledIcon, PaperPlaneIcon, UploadIcon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
 import { ApiError, fmtDate, fmtDateTime, useApi, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
 import type { DocType, Worker, WorkerDocument } from "@/lib/types";
@@ -207,10 +208,8 @@ function UploadDocument({ onSaved }: { onSaved: () => void }) {
           <Flex direction="column" gap="3">
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Worker</Text>
-              <Select.Root value={f.workerId} onValueChange={(workerId) => setF({ ...f, workerId })}>
-                <Select.Trigger placeholder="Choose worker" style={{ width: "100%" }} />
-                <Select.Content>{workers?.map((w) => <Select.Item key={w.id} value={w.id}>{w.name}</Select.Item>)}</Select.Content>
-              </Select.Root>
+              <SearchSelect noun="worker" placeholder="Choose worker" value={f.workerId} onChange={(workerId) => setF({ ...f, workerId })}
+                options={workers?.map((w) => ({ id: w.id, label: w.name, hint: w.skills.join(", ") })) ?? []} />
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Document type</Text>
