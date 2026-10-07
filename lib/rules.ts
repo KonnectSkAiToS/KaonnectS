@@ -1,6 +1,7 @@
 import type { DB } from "./data";
 import type { Candidate, ComplianceStatus, DocType, Shift, Site, Skill, Worker } from "./types";
 
+
 export const WTR_MAX_HOURS = 48;
 export const MIN_REST_HOURS = 11;
 export const BASE_DOCS: DocType[] = ["Right to Work", "References"];
@@ -87,11 +88,76 @@ export function bookingBlockers(db: DB, w: Worker, shift: Shift, site: Site): st
     }
   }
 
+  const leave = leaveOverlapping(db, w.id, shift);
+  if (leave) reasons.push(`On approved ${leave.type} ${leave.from === leave.to ? leave.from : `${leave.from} to ${leave.to}`}`);
+
   const week = weekHours(db, w.id, shift.start, shift.id);
   if (week + hours(shift) > WTR_MAX_HOURS)
     reasons.push(`WTR: would reach ${week + hours(shift)}h this week (max ${WTR_MAX_HOURS}h)`);
 
   return [...new Set(reasons)];
+}
+
+/** Local calendar date YYYY-MM-DD (leave is booked in whole local days). */
+export function localDate(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function leaveClashes(l: { from: string; to: string }, shift: { start: string; end: string }) {
+  const from = localDate(shift.start);
+  const to = localDate(new Date(Date.parse(shift.end) - 1).toISOString());
+  return l.from <= to && l.to >= from;
+}
+
+export function leaveOverlapping(db: DB, workerId: string, shift: { start: string; end: string }) {
+  return db.leave.find((l) => l.workerId === workerId && l.status === "approved" && leaveClashes(l, shift));
+}
+
+/** Booked future shifts that a leave request would clash with if approved. */
+export function leaveConflicts(db: DB, l: { workerId: string; from: string; to: string }) {
+  return db.shifts.filter(
+    (s) => s.workerId === l.workerId && ["assigned", "confirmed"].includes(s.status) && leaveClashes(l, s),
+  );
+}
+
+export const HOLIDAY_ACCRUAL_RATE = 0.1207; // 5.6 weeks / 46.4 working weeks
+export const LEAVE_DAY_HOURS = 8;
+
+export const leaveDays = (l: { from: string; to: string }) =>
+  Math.round((Date.parse(l.to) - Date.parse(l.from)) / DAY) + 1;
+
+/** Statutory holiday for PAYE / zero-hours workers accrues at 12.07% of hours worked. */
+export function leaveBalance(db: DB, w: Worker) {
+  const eligible = w.contractType !== "Umbrella";
+  const worked = db.timesheets.filter((t) => t.workerId === w.id && t.status === "approved").reduce((a, t) => a + t.hours, 0);
+  const accruedHours = eligible ? w.leaveOpeningHours + worked * HOLIDAY_ACCRUAL_RATE : 0;
+  const usedHours = db.leave
+    .filter((l) => l.workerId === w.id && l.type === "holiday" && l.status === "approved")
+    .reduce((a, l) => a + leaveDays(l) * LEAVE_DAY_HOURS, 0);
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return { eligible, accruedHours: r(accruedHours), usedHours: r(usedHours), remainingHours: r(accruedHours - usedHours) };
+}
+
+export const LATE_GRACE_MINS = 10;
+
+/**
+ * Reliability over the last 60 days: start at 100, -20 per no-show, -5 per late check-in.
+ * Workers with no history get a neutral 75.
+ * ponytail: fixed weights, tune once real attendance data exists.
+ */
+export function reliabilityOf(db: DB, workerId: string) {
+  const since = Date.now() - 60 * DAY;
+  const shifts = db.shifts.filter(
+    (s) => s.workerId === workerId && Date.parse(s.start) > since && ["completed", "in_progress", "no_show"].includes(s.status),
+  );
+  if (!shifts.length) return 75;
+  const noShows = shifts.filter((s) => s.status === "no_show").length;
+  const late = shifts.filter((s) => {
+    const inEv = db.attendance.find((a) => a.shiftId === s.id && a.kind === "in");
+    return inEv && Date.parse(inEv.at) > Date.parse(s.start) + LATE_GRACE_MINS * 6e4;
+  }).length;
+  return Math.max(0, Math.min(100, 100 - noShows * 20 - late * 5));
 }
 
 export function rankCandidates(db: DB, shift: Shift): Candidate[] {

@@ -48,7 +48,8 @@ export interface Worker {
   skills: Skill[];
   contractType: ContractType;
   availableDays: string[]; // "Mon".."Sun"
-  reliability: number; // 0-100
+  reliability: number; // 0-100, recomputed from attendance history (rules.reliabilityOf)
+  leaveOpeningHours: number; // holiday accrued before this system went live
 }
 
 export type DocStatus = "pending" | "verified" | "rejected";
@@ -118,6 +119,7 @@ export interface Timesheet {
   billRate?: number;
   status: "pending" | "approved" | "disputed";
   note?: string;
+  syncedTo?: "Xero" | "Sage" | "BrightPay";
 }
 
 export interface RateCard {
@@ -153,3 +155,62 @@ export interface Candidate {
 }
 
 export type ComplianceStatus = "compliant" | "expiring" | "pending" | "blocked";
+
+// ---- Phase 2 ----
+
+export type LeaveType = "holiday" | "unavailable" | "sick";
+
+export interface LeaveRequest {
+  id: string;
+  workerId: string;
+  type: LeaveType;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD inclusive
+  status: "pending" | "approved" | "rejected";
+  note?: string;
+  requestedAt: string;
+  decidedBy?: string;
+}
+
+export interface LeaveBalance {
+  eligible: boolean; // umbrella workers have no statutory holiday accrual
+  accruedHours: number;
+  usedHours: number;
+  remainingHours: number;
+}
+
+export interface Conversation {
+  id: string;
+  workerId: string;
+  shiftId: string | null;
+  subject: string;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  from: "agency" | "worker";
+  author: string;
+  body: string;
+  at: string;
+}
+
+export type PayrollProvider = "Xero" | "Sage" | "BrightPay";
+
+export interface PayrollConnection {
+  provider: PayrollProvider;
+  connected: boolean;
+  orgName?: string;
+  connectedAt?: string;
+}
+
+export interface PayrollSync {
+  id: string;
+  provider: PayrollProvider;
+  at: string;
+  lines: number;
+  grossPay: number;
+  status: "success" | "failed";
+  message: string;
+  by: string;
+}

@@ -6,9 +6,12 @@ import { ArrowLeftIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { fmtDate, fmtHours, fmtTime, useApi } from "@/lib/client";
 import { ComplianceBadge, Empty, Load, PageHeader, ShiftBadge, StatusBadge } from "@/components/ui";
 import { WTR_MAX_HOURS } from "@/lib/rules";
-import type { ComplianceStatus, DocType, ShiftView, Worker, WorkerDocument } from "@/lib/types";
+import type { ComplianceStatus, DocType, LeaveBalance, LeaveRequest, ShiftView, Worker, WorkerDocument } from "@/lib/types";
 
-interface Detail { worker: Worker; compliance: ComplianceStatus; missing: DocType[]; weekHours: number; documents: WorkerDocument[]; shifts: ShiftView[] }
+interface Detail {
+  worker: Worker; compliance: ComplianceStatus; missing: DocType[]; weekHours: number; documents: WorkerDocument[]; shifts: ShiftView[];
+  leaveBalance: LeaveBalance; leave: LeaveRequest[];
+}
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function WorkerPage() {
@@ -18,7 +21,7 @@ export default function WorkerPage() {
     <>
       <Link href="/workers" style={{ textDecoration: "none" }}><Text size="2" color="gray"><Flex align="center" gap="1" mb="3"><ArrowLeftIcon /> All workers</Flex></Text></Link>
       <Load data={data} error={error}>
-        {({ worker: w, compliance, missing, weekHours, documents, shifts }) => (
+        {({ worker: w, compliance, missing, weekHours, documents, shifts, leaveBalance, leave }) => (
           <>
             <PageHeader title={w.name} subtitle={w.skills.join(" · ")}><ComplianceBadge status={compliance} /></PageHeader>
             {missing.length > 0 && (
@@ -43,6 +46,15 @@ export default function WorkerPage() {
                 <Heading size="2" mb="2">Hours this week</Heading>
                 <div className="bar"><span style={{ width: `${Math.min(100, (weekHours / WTR_MAX_HOURS) * 100)}%`, background: weekHours > WTR_MAX_HOURS * 0.85 ? "var(--red-9)" : undefined }} /></div>
                 <Text size="1" color="gray">{fmtHours(weekHours)} of {WTR_MAX_HOURS}h Working Time Regulations limit</Text>
+                <Heading size="2" mt="4" mb="2">Holiday</Heading>
+                {leaveBalance.eligible
+                  ? <Text size="2">{leaveBalance.remainingHours}h remaining <Text color="gray">({leaveBalance.accruedHours}h accrued, {leaveBalance.usedHours}h used)</Text></Text>
+                  : <Text size="2" color="gray">Umbrella contract: no statutory holiday accrual</Text>}
+                {leave.map((l) => (
+                  <Text as="div" size="1" key={l.id} mt="1">
+                    <Badge color={l.status === "approved" ? "green" : "amber"}>{l.type} · {l.status}</Badge> {fmtDate(`${l.from}T00:00`)}{l.to !== l.from && ` – ${fmtDate(`${l.to}T00:00`)}`}
+                  </Text>
+                ))}
               </Card>
             </Grid>
 

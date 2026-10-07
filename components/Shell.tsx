@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Badge, Box, DropdownMenu, Flex, IconButton, Select, Separator, Text, Tooltip } from "@radix-ui/themes";
+import { Avatar, Box, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import {
   BarChartIcon, CalendarIcon, ChatBubbleIcon, ClockIcon, DashboardIcon, FileTextIcon, GearIcon,
   DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, ListBulletIcon, MoonIcon, PersonIcon, SunIcon,
@@ -12,7 +12,7 @@ import { useThemeMode, type ThemeMode } from "./AppTheme";
 import type { Role } from "@/lib/types";
 
 const ALL: Role[] = ["super_admin", "coordinator", "client_admin"];
-const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[]; soon?: boolean }[] = [
+const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[] }[] = [
   { href: "/", label: "Dashboard", icon: <DashboardIcon />, roles: ALL },
   { href: "/shifts", label: "Shifts", icon: <ListBulletIcon />, roles: ALL },
   { href: "/rota", label: "Rota", icon: <CalendarIcon />, roles: ALL },
@@ -22,14 +22,18 @@ const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[]; 
   { href: "/compliance", label: "Compliance", icon: <IdCardIcon />, roles: ["super_admin", "coordinator"] },
   { href: "/clients", label: "Clients & Sites", icon: <HomeIcon />, roles: ALL },
   { href: "/reports", label: "Reports", icon: <BarChartIcon />, roles: ALL },
-  { href: "/leave", label: "Leave", icon: <SunIcon />, roles: ALL, soon: true },
-  { href: "/messages", label: "Messages", icon: <ChatBubbleIcon />, roles: ["super_admin", "coordinator"], soon: true },
+  { href: "/leave", label: "Leave", icon: <SunIcon />, roles: ALL },
+  { href: "/messages", label: "Messages", icon: <ChatBubbleIcon />, roles: ["super_admin", "coordinator"] },
   { href: "/settings", label: "Settings & Audit", icon: <GearIcon />, roles: ["super_admin"] },
 ];
 
 const THEME_ICON: Record<ThemeMode, React.ReactNode> = { light: <SunIcon />, dark: <MoonIcon />, system: <DesktopIcon /> };
 
-const USER: Record<Role, string> = { super_admin: "Priya Shah", coordinator: "Tom Reed", client_admin: "Helen Ward · Oakwood Care" };
+const USER: Record<Role, { name: string; org?: string }> = {
+  super_admin: { name: "Priya Shah" },
+  coordinator: { name: "Tom Reed" },
+  client_admin: { name: "Helen Ward", org: "Oakwood Care" },
+};
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { role, setRole } = useRole();
@@ -49,13 +53,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <Flex minHeight="100vh">
+      <IconButton variant="surface" color="gray" className="menu-btn" onClick={() => setOpen(true)} aria-label="Open menu"><HamburgerMenuIcon /></IconButton>
+      {open && <div className="scrim" onClick={() => setOpen(false)} />}
       <Box asChild className={`sidebar${open ? " open" : ""}${collapsed ? " collapsed" : ""}`}>
-        <nav onClick={() => setOpen(false)}>
-          <Flex direction="column" gap="1" p="3">
+        <nav>
+          <Flex direction="column" gap="1" p="3" height="100%">
             <Flex align="center" justify="between" mb="3" className="brand">
               <Text size="3" weight="bold" ml="2" className="label">Staffing Admin</Text>
               <Tooltip content={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-                <IconButton variant="ghost" color="gray" className="collapse-btn" onClick={(e) => { e.stopPropagation(); toggleCollapsed(); }} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+                <IconButton variant="ghost" color="gray" className="collapse-btn" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
                   {collapsed ? <DoubleArrowRightIcon /> : <DoubleArrowLeftIcon />}
                 </IconButton>
               </Tooltip>
@@ -63,53 +69,50 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {NAV.filter((n) => n.roles.includes(role)).map((n) => {
               const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
               const link = (
-                <Link key={n.href} href={n.href} className={`navlink${active ? " active" : ""}`} aria-label={n.label}>
+                <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className={`navlink${active ? " active" : ""}`} aria-label={n.label}>
                   {n.icon}
                   <span className="label" style={{ flex: 1 }}>{n.label}</span>
-                  {n.soon && <Badge size="1" color="gray" className="label">P2</Badge>}
                 </Link>
               );
               return collapsed ? <Tooltip key={n.href} content={n.label} side="right">{link}</Tooltip> : link;
             })}
+
+            <Box mt="auto" pt="3" style={{ borderTop: "1px solid var(--gray-a5)" }}>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  <button className="navlink profile" aria-label="Account, role and theme">
+                    <Avatar size="2" radius="full" fallback={USER[role].name.split(" ").map((p) => p[0]).join("")} />
+                    <span className="label" style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <Text as="div" size="2" weight="medium" truncate>{USER[role].name}</Text>
+                      <Text as="div" size="1" color="gray" truncate>{ROLE_LABEL[role]}{USER[role].org && ` · ${USER[role].org}`}</Text>
+                    </span>
+                    <span className="label">{THEME_ICON[mode]}</span>
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content side="top" align="start" style={{ minWidth: 220 }}>
+                  <DropdownMenu.Label>View as (demo)</DropdownMenu.Label>
+                  <DropdownMenu.RadioGroup value={role} onValueChange={(r) => setRole(r as Role)}>
+                    {ALL.map((r) => <DropdownMenu.RadioItem key={r} value={r}>{ROLE_LABEL[r]}</DropdownMenu.RadioItem>)}
+                  </DropdownMenu.RadioGroup>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Label>Theme</DropdownMenu.Label>
+                  <DropdownMenu.RadioGroup value={mode} onValueChange={(m) => setMode(m as ThemeMode)}>
+                    <DropdownMenu.RadioItem value="light"><SunIcon /> Light</DropdownMenu.RadioItem>
+                    <DropdownMenu.RadioItem value="dark"><MoonIcon /> Dark</DropdownMenu.RadioItem>
+                    <DropdownMenu.RadioItem value="system"><DesktopIcon /> System</DropdownMenu.RadioItem>
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </Box>
           </Flex>
         </nav>
       </Box>
 
-      <Flex direction="column" flexGrow="1" minWidth="0">
-        <Flex align="center" justify="between" gap="3" px="4" py="3" className="topbar">
-          <Flex align="center" gap="2">
-            <IconButton variant="ghost" className="menu-btn" onClick={() => setOpen(!open)} aria-label="Menu"><HamburgerMenuIcon /></IconButton>
-            <Text size="2" color="gray">Signed in as <Text weight="medium" color="gray" highContrast>{USER[role]}</Text></Text>
-          </Flex>
-          <Flex align="center" gap="3">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                <IconButton variant="ghost" color="gray" aria-label="Theme">{THEME_ICON[mode]}</IconButton>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content>
-                <DropdownMenu.RadioGroup value={mode} onValueChange={(m) => setMode(m as ThemeMode)}>
-                  <DropdownMenu.RadioItem value="light">Light</DropdownMenu.RadioItem>
-                  <DropdownMenu.RadioItem value="dark">Dark</DropdownMenu.RadioItem>
-                  <DropdownMenu.RadioItem value="system">System</DropdownMenu.RadioItem>
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-            <Text size="1" color="gray">View as</Text>
-            <Select.Root value={role} onValueChange={(r) => setRole(r as Role)} size="1">
-              <Select.Trigger />
-              <Select.Content>
-                {ALL.map((r) => <Select.Item key={r} value={r}>{ROLE_LABEL[r]}</Select.Item>)}
-              </Select.Content>
-            </Select.Root>
-          </Flex>
-        </Flex>
-        <Separator size="4" />
-        <Box p={{ initial: "4", md: "6" }} style={{ maxWidth: 1280, width: "100%" }}>
-          {allowed.includes(role) ? children : (
-            <Text color="gray">{ROLE_LABEL[role]} does not have access to this page.</Text>
-          )}
-        </Box>
-      </Flex>
+      <Box flexGrow="1" minWidth="0" p={{ initial: "4", md: "6" }} pt={{ initial: "8", sm: "6" }}>
+        {allowed.includes(role) ? children : (
+          <Text color="gray">{ROLE_LABEL[role]} does not have access to this page.</Text>
+        )}
+      </Box>
     </Flex>
   );
 }

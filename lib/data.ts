@@ -1,8 +1,9 @@
 // Hardcoded in-memory data. Resets when the dev server restarts.
 // ponytail: in-memory store, swap for the real API/Postgres when the backend exists.
-import { BASE_DOCS, CARE_DOCS, HOSPITALITY_DOCS, bookingBlockers, hours, isCareWorker } from "./rules";
+import { BASE_DOCS, CARE_DOCS, HOSPITALITY_DOCS, bookingBlockers, hours, isCareWorker, localDate, reliabilityOf } from "./rules";
 import type {
-  AttendanceEvent, AuditEntry, Client, RateCard, Shift, Site, Skill, Timesheet, User, Worker, WorkerDocument,
+  AttendanceEvent, AuditEntry, Client, Conversation, LeaveRequest, Message, PayrollConnection, PayrollSync,
+  RateCard, Shift, Site, Skill, Timesheet, User, Worker, WorkerDocument,
 } from "./types";
 
 export interface DB {
@@ -16,6 +17,11 @@ export interface DB {
   rateCards: RateCard[];
   users: User[];
   audit: AuditEntry[];
+  leave: LeaveRequest[];
+  conversations: Conversation[];
+  messages: Message[];
+  payrollConnections: PayrollConnection[];
+  payrollSyncs: PayrollSync[];
 }
 
 // Deterministic PRNG so the data looks the same every restart.
@@ -29,7 +35,7 @@ function at(dayOffset: number, h: number, m = 0) {
   d.setHours(h, m, 0, 0);
   return d.toISOString();
 }
-const dateOnly = (dayOffset: number) => at(dayOffset, 0).slice(0, 10);
+const dateOnly = (dayOffset: number) => localDate(at(dayOffset, 12));
 
 const NAMES = [
   "Amara Okafor", "Ben Hughes", "Chloe Patel", "Daniel Kowalski", "Ella Thompson", "Farah Hussain",
@@ -73,7 +79,8 @@ function build(): DB {
     skills: i < 14 || (i >= 25 && i < 35) ? CARE_SKILL_SETS[i % 4] : HOSP_SKILL_SETS[i % 5],
     contractType: pick(["PAYE", "Zero-hours", "Zero-hours", "Umbrella"] as const),
     availableDays: DAYS.filter(() => rand() > 0.3),
-    reliability: 60 + Math.floor(rand() * 40),
+    reliability: 75,
+    leaveOpeningHours: 40 + Math.floor(rand() * 80),
   }));
 
   // Documents: mostly valid; a few expired, expiring soon or pending to exercise the compliance rules.
@@ -116,7 +123,26 @@ function build(): DB {
     }
   }
 
-  const db: DB = { clients, sites, workers, documents, shifts: [], attendance: [], timesheets: [], rateCards, audit: [], users: [
+  // Approved/pending leave is seeded before shifts so seeded bookings respect it.
+  for (const id of ["w2", "w20", "w27", "w30"]) workers.find((w) => w.id === id)!.contractType = "PAYE"; // holiday needs an eligible contract
+  const leave: LeaveRequest[] = [
+    { id: "l1", workerId: "w2", type: "holiday", from: dateOnly(3), to: dateOnly(6), status: "approved", requestedAt: at(-20, 11), decidedBy: "Tom Reed", note: "Family wedding" },
+    { id: "l2", workerId: "w27", type: "holiday", from: dateOnly(8), to: dateOnly(12), status: "pending", requestedAt: at(-2, 9), note: "Half-term with kids" },
+    { id: "l3", workerId: "w16", type: "unavailable", from: dateOnly(1), to: dateOnly(2), status: "pending", requestedAt: at(-1, 19), note: "College exams" },
+    { id: "l4", workerId: "w8", type: "sick", from: dateOnly(-3), to: dateOnly(-1), status: "approved", requestedAt: at(-3, 6), decidedBy: "Tom Reed" },
+    { id: "l5", workerId: "w30", type: "holiday", from: dateOnly(14), to: dateOnly(20), status: "pending", requestedAt: at(-4, 14), note: "Trip to Poland" },
+    { id: "l6", workerId: "w20", type: "holiday", from: dateOnly(-40), to: dateOnly(-36), status: "approved", requestedAt: at(-60, 10), decidedBy: "Priya Shah" },
+    { id: "l7", workerId: "w11", type: "holiday", from: dateOnly(5), to: dateOnly(5), status: "rejected", requestedAt: at(-6, 10), decidedBy: "Tom Reed", note: "Short notice, site fully booked" },
+  ];
+
+  const db: DB = { clients, sites, workers, documents, shifts: [], attendance: [], timesheets: [], rateCards, audit: [], leave,
+    conversations: [], messages: [], payrollSyncs: [],
+    payrollConnections: [
+      { provider: "Xero", connected: true, orgName: "Kaitos Staffing Ltd", connectedAt: at(-45, 10) },
+      { provider: "Sage", connected: false },
+      { provider: "BrightPay", connected: false },
+    ],
+    users: [
     { id: "u1", name: "Priya Shah", email: "priya@agency.example", role: "super_admin", clientIds: null },
     { id: "u2", name: "Tom Reed", email: "tom@agency.example", role: "coordinator", clientIds: ["c1", "c2"] },
     { id: "u3", name: "Helen Ward", email: "helen@oakwoodcare.example", role: "client_admin", clientIds: ["c1"] },
@@ -124,11 +150,11 @@ function build(): DB {
     { id: "u5", name: "Aisha Khan", email: "aisha@agency.example", role: "coordinator", clientIds: ["c3"] },
   ] };
 
-  // Shifts from 7 days ago to 10 days ahead.
+  // Shifts from 3 weeks ago to 10 days ahead.
   const CARE_PATTERNS = [[7, 15, "Carer"], [14, 22, "Carer"], [8, 20, "Nurse"], [21, 31, "Senior Carer"]] as const;
   const HOSP_PATTERNS = [[6, 14, "Housekeeping"], [7, 15, "Kitchen Porter"], [17, 23, "Waiting Staff"], [12, 22, "Chef"]] as const;
   const now = Date.now();
-  for (let day = -7; day <= 10; day++) {
+  for (let day = -21; day <= 10; day++) {
     for (const s of sites) {
       const care = clients.find((c) => c.id === s.clientId)!.sector === "care";
       for (const [h1, h2, role] of care ? CARE_PATTERNS : HOSP_PATTERNS) {
@@ -170,7 +196,7 @@ function build(): DB {
   for (const sh of db.shifts) {
     if (!sh.workerId || !["in_progress", "completed"].includes(sh.status)) continue;
     const manual = sh.status === "in_progress" && rand() < 0.35;
-    const offset = Math.floor(rand() * 10) - 5;
+    const offset = rand() < 0.12 ? 12 + Math.floor(rand() * 20) : Math.floor(rand() * 10) - 5; // some late arrivals
     db.attendance.push({
       id: `a${db.attendance.length + 1}`, shiftId: sh.id, workerId: sh.workerId, kind: "in",
       at: new Date(Date.parse(sh.start) + offset * 6e4).toISOString(),
@@ -194,6 +220,44 @@ function build(): DB {
   }
   for (const t of db.timesheets) if (t.status === "disputed") t.note = "Worker left 45 minutes early according to the unit manager";
 
+  for (const w of workers) w.reliability = reliabilityOf(db, w.id);
+
+  // Message threads between coordinators and workers.
+  const thread = (workerId: string, subject: string, shiftId: string | null, msgs: [("agency" | "worker"), string, number][]) => {
+    const id = `cv${db.conversations.length + 1}`;
+    db.conversations.push({ id, workerId, shiftId, subject });
+    const w = workers.find((x) => x.id === workerId)!;
+    for (const [from, body, minsAgo] of msgs)
+      db.messages.push({ id: `m${db.messages.length + 1}`, conversationId: id, from, author: from === "agency" ? "Tom Reed" : w.name, body, at: new Date(now - minsAgo * 6e4).toISOString() });
+  };
+  const urgentOpen = db.shifts.find((s) => s.urgent && s.status === "open");
+  const lateIn = db.attendance.find((a) => a.kind === "in" && a.status === "pending");
+  thread("w6", "Can you cover tomorrow?", urgentOpen?.id ?? null, [
+    ["agency", "Hi Farah, we have an urgent shift tomorrow. Are you free?", 180],
+    ["worker", "Yes I can do it, what time does it start?", 150],
+    ["agency", urgentOpen ? `${new Date(urgentOpen.start).toTimeString().slice(0, 5)} until ${new Date(urgentOpen.end).toTimeString().slice(0, 5)}. I'll book you in now.` : "I'll send the details over now.", 140],
+  ]);
+  if (lateIn) {
+    const w = workers.find((x) => x.id === lateIn.workerId)!;
+    thread(w.id, "Manual check-in today", lateIn.shiftId, [
+      ["worker", `Hi, no signal in the basement so I couldn't check in with GPS. I'm on site.`, 95],
+      ["agency", `Thanks ${w.name.split(" ")[0]}, I've flagged it to the site manager to approve.`, 80],
+    ]);
+  }
+  thread("w27", "Holiday request", null, [
+    ["worker", "I've put in a holiday request for half-term. Hope that's ok.", 60 * 26],
+  ]);
+  thread("w13", "References still pending", null, [
+    ["agency", "Hi Mohammed, we're still waiting on your second reference. Can you chase your previous employer?", 60 * 50],
+    ["worker", "Sorry, I'll call them today.", 60 * 48],
+  ]);
+
+  for (const t of db.timesheets) if (t.status === "approved" && Date.parse(t.date) < now - 7 * 864e5) t.syncedTo = "Xero";
+  db.payrollSyncs = [
+    { id: "ps1", provider: "Xero", at: at(-7, 17, 30), lines: 64, grossPay: 6420.5, status: "success", message: "Pay run created as draft in Xero", by: "Priya Shah" },
+    { id: "ps2", provider: "Xero", at: at(-14, 17, 5), lines: 58, grossPay: 5933.2, status: "failed", message: "3 employees missing Xero employee IDs", by: "Priya Shah" },
+  ];
+
   db.audit = [
     { id: "au1", at: at(-2, 9, 12), actor: "Priya Shah", action: "rate_card.updated", detail: "Riverside Hotels · Chef weekday pay £15.50" },
     { id: "au2", at: at(-1, 16, 40), actor: "Tom Reed", action: "document.verified", detail: "Amara Okafor · DBS Enhanced" },
@@ -202,8 +266,9 @@ function build(): DB {
   return db;
 }
 
-const g = globalThis as unknown as { __staffingDbV2?: DB };
-export const db: DB = (g.__staffingDbV2 ??= build());
+// Bump the key when the data shape changes so a running dev server reseeds.
+const g = globalThis as unknown as { __staffingDbV5?: DB };
+export const db: DB = (g.__staffingDbV5 ??= build());
 
 export function audit(actor: string, action: string, detail: string) {
   db.audit.unshift({ id: `au${db.audit.length + 1}`, at: new Date().toISOString(), actor, action, detail });

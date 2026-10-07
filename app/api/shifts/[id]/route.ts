@@ -1,5 +1,5 @@
 import { audit, db } from "@/lib/data";
-import { rankCandidates } from "@/lib/rules";
+import { rankCandidates, reliabilityOf } from "@/lib/rules";
 import { body, ctx, fail, ok, redact, shiftView } from "@/lib/server";
 import type { ShiftStatus } from "@/lib/types";
 
@@ -41,7 +41,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === "cancel") shift.status = "cancelled";
   if (action === "confirm") shift.status = "confirmed";
-  if (action === "no_show") shift.status = "no_show";
+  if (action === "no_show") {
+    shift.status = "no_show";
+    const w = db.workers.find((x) => x.id === shift.workerId);
+    if (w) w.reliability = reliabilityOf(db, w.id);
+  }
   if (action === "unassign") Object.assign(shift, { status: "open", workerId: null });
   audit(c.user.name, `shift.${action}`, `${shift.id} · ${db.sites.find((s) => s.id === shift.siteId)!.name}`);
   return ok(shiftView(c, shift));

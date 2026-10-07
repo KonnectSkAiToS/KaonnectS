@@ -1,6 +1,7 @@
 "use client";
-import { Card, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
-import { fmtHours, fmtMoney, useApi } from "@/lib/client";
+import Link from "next/link";
+import { Badge, Box, Card, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
+import { fmtDate, fmtHours, fmtMoney, useApi } from "@/lib/client";
 import { Load, PageHeader } from "@/components/ui";
 
 interface Report {
@@ -9,6 +10,9 @@ interface Report {
   hours: { id: string; name: string; hours: number }[];
   compliance: Record<"compliant" | "expiring" | "pending" | "blocked", number> | null;
   margin: { client: string; hours: number; revenue: number; cost: number; margin: number; marginPct: number }[] | null;
+  reliability: { id: string; name: string; score: number; noShows: number }[];
+  wtrRisk: { id: string; name: string; hours: number }[];
+  weeklyMargin: { weekEnding: string; hours: number; revenue: number; cost: number; margin: number }[] | null;
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {
@@ -62,6 +66,70 @@ export default function ReportsPage() {
                 </Flex>
               </Card>
             </Grid>
+
+            <Grid columns={{ initial: "1", md: "2" }} gap="4">
+              <Card>
+                <Heading size="3" mb="1">Reliability</Heading>
+                <Text as="p" size="1" color="gray" mb="3">Last 60 days: starts at 100, −20 per no-show, −5 per check-in more than 10 minutes late.</Text>
+                <Table.Root size="1">
+                  <Table.Header><Table.Row>
+                    <Table.ColumnHeaderCell>Worker</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Score</Table.ColumnHeaderCell><Table.ColumnHeaderCell>No-shows</Table.ColumnHeaderCell>
+                  </Table.Row></Table.Header>
+                  <Table.Body>
+                    {[...r.reliability.slice(0, 5), ...r.reliability.slice(-5).filter((w) => !r.reliability.slice(0, 5).includes(w))].map((w, i) => (
+                      <Table.Row key={w.id} style={i === 5 ? { borderTop: "2px solid var(--gray-a6)" } : undefined}>
+                        <Table.Cell><Link href={`/workers/${w.id}`}>{w.name}</Link></Table.Cell>
+                        <Table.Cell><Badge color={w.score >= 85 ? "green" : w.score >= 65 ? "amber" : "red"}>{w.score}</Badge></Table.Cell>
+                        <Table.Cell>{w.noShows}</Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+                <Text as="p" size="1" color="gray" mt="2">Top 5 and bottom 5 shown.</Text>
+              </Card>
+
+              <Card>
+                <Heading size="3" mb="1">Working Time Regulations risk</Heading>
+                <Text as="p" size="1" color="gray" mb="3">Workers at 80% or more of the {r.wtrMax}h weekly limit this week.</Text>
+                {r.wtrRisk.length === 0 ? <Text size="2" color="gray">Nobody is close to the limit.</Text> : (
+                  <Table.Root size="1">
+                    <Table.Body>
+                      {r.wtrRisk.map((w) => (
+                        <Table.Row key={w.id}>
+                          <Table.Cell><Link href={`/workers/${w.id}`}>{w.name}</Link></Table.Cell>
+                          <Table.Cell><Badge color={w.hours >= r.wtrMax ? "red" : "amber"}>{fmtHours(w.hours)}</Badge></Table.Cell>
+                          <Table.Cell><Text size="1" color="gray">{fmtHours(Math.max(0, r.wtrMax - w.hours))} left</Text></Table.Cell>
+                        </Table.Row>
+                      ))}
+                    </Table.Body>
+                  </Table.Root>
+                )}
+              </Card>
+            </Grid>
+
+            {r.weeklyMargin && (
+              <Card>
+                <Heading size="3" mb="3">Weekly revenue vs pay-out (last 4 weeks)</Heading>
+                {(() => {
+                  const max = Math.max(1, ...r.weeklyMargin.map((w) => w.revenue));
+                  return (
+                    <Flex direction="column" gap="3">
+                      {r.weeklyMargin.map((w) => (
+                        <Flex key={w.weekEnding} align="center" gap="3">
+                          <Text size="2" style={{ width: 110 }}>w/e {fmtDate(w.weekEnding)}</Text>
+                          <Box flexGrow="1">
+                            <div className="bar" style={{ height: 10 }}><span style={{ width: `${(w.revenue / max) * 100}%` }} /></div>
+                            <div className="bar" style={{ height: 10, marginTop: 3 }}><span style={{ width: `${(w.cost / max) * 100}%`, background: "var(--gray-9)" }} /></div>
+                          </Box>
+                          <Text size="1" style={{ width: 170, textAlign: "right" }}>{fmtMoney(w.revenue)} / {fmtMoney(w.cost)}<Text as="div" color="green">margin {fmtMoney(w.margin)}</Text></Text>
+                        </Flex>
+                      ))}
+                      <Flex gap="3"><Badge>revenue (bill)</Badge><Badge color="gray">pay-out</Badge></Flex>
+                    </Flex>
+                  );
+                })()}
+              </Card>
+            )}
 
             {r.compliance && (
               <Card>

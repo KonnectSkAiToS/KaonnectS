@@ -36,6 +36,9 @@ export default function ShiftDetailPage() {
           return (
             <>
               <PageHeader title={`${s.role} · ${s.siteName}`} subtitle={`${fmtDate(s.start)}, ${fmtTime(s.start)}–${fmtTime(s.end)}`}>
+                {canAssign && candidates.some((c) => !c.reasons.length) && (
+                  <Button onClick={() => act("/shifts/autofill", "POST", { shiftIds: [s.id] })}>Auto-fill with best match</Button>
+                )}
                 {s.status === "assigned" && role !== "client_admin" && <Button variant="soft" onClick={() => act(`/shifts/${id}`, "PATCH", { action: "confirm" })}>Mark confirmed by worker</Button>}
                 {["assigned", "confirmed"].includes(s.status) && role !== "client_admin" && <Button variant="soft" color="gray" onClick={() => act(`/shifts/${id}`, "PATCH", { action: "unassign" })}>Unassign</Button>}
                 {["confirmed", "in_progress"].includes(s.status) && role !== "client_admin" && <Button variant="soft" color="red" onClick={() => act(`/shifts/${id}`, "PATCH", { action: "no_show" })}>Mark no-show</Button>}

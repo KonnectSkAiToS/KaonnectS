@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
-import { Badge, Box, Card, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
-import { fmtDate, fmtDateTime, fmtTime, useApi } from "@/lib/client";
-import { Empty, Load, PageHeader } from "@/components/ui";
+import { useState } from "react";
+import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
+import { ApiError, fmtDate, fmtDateTime, fmtTime, useApi, useRole, useSend } from "@/lib/client";
+import { Empty, ErrorCallout, Load, PageHeader } from "@/components/ui";
 import type { ShiftView, WorkerDocument } from "@/lib/types";
 
 interface Dashboard {
@@ -24,10 +25,33 @@ function Stat({ label, value, color, href }: { label: string; value: number; col
 }
 
 export default function DashboardPage() {
-  const { data, error } = useApi<Dashboard>("/dashboard");
+  const { role } = useRole();
+  const send = useSend();
+  const { data, error, reload } = useApi<Dashboard>("/dashboard");
+  const [fill, setFill] = useState<{ filled: number; total: number }>();
+  const [fillError, setFillError] = useState<ApiError>();
+
+  async function autoFill() {
+    try {
+      setFillError(undefined);
+      setFill(await send<{ filled: number; total: number }>("/shifts/autofill", "POST", {}));
+      reload();
+    } catch (e) {
+      setFillError(e as ApiError);
+    }
+  }
+
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Today's shifts, things needing attention, and the week ahead." />
+      <PageHeader title="Dashboard" subtitle="Today's shifts, things needing attention, and the week ahead.">
+        {role !== "client_admin" && !!data?.urgent.length && <Button onClick={autoFill}>Auto-fill next 72h ({data.urgent.length})</Button>}
+      </PageHeader>
+      <ErrorCallout error={fillError} />
+      {fill && (
+        <Callout.Root color={fill.filled === fill.total ? "green" : "amber"} mb="4">
+          <Callout.Text>Auto-fill assigned {fill.filled} of {fill.total} shifts to the best-ranked bookable workers.{fill.filled < fill.total && " The rest have nobody who passes the booking rules."}</Callout.Text>
+        </Callout.Root>
+      )}
       <Load data={data} error={error}>
         {(d) => (
           <Flex direction="column" gap="5">

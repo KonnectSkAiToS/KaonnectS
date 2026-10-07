@@ -1,5 +1,5 @@
 import { db } from "@/lib/data";
-import { complianceStatus, missingDocs, requiredDocsFor, weekHours } from "@/lib/rules";
+import { complianceStatus, leaveBalance, missingDocs, requiredDocsFor, weekHours } from "@/lib/rules";
 import { ctx, fail, ok, shiftView } from "@/lib/server";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,5 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     weekHours: weekHours(db, id, now),
     documents: db.documents.filter((d) => d.workerId === id),
     shifts: shifts.map((s) => shiftView(c, s)),
+    leaveBalance: leaveBalance(db, w),
+    leave: db.leave.filter((l) => l.workerId === id && l.status !== "rejected" && l.to >= now.slice(0, 10)),
   });
 }

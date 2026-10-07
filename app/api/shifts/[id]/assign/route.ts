@@ -8,11 +8,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const shift = db.shifts.find((s) => s.id === id && c.siteIds.has(s.siteId));
   if (!shift) return fail(404, "Shift not found");
-  if (!["open", "applied"].includes(shift.status)) return fail(409, `Shift is already ${shift.status.replace("_", " ")}`);
+  // Future assigned/confirmed shifts can be reassigned (e.g. drag-and-drop on the rota).
+  const reassignable = ["assigned", "confirmed"].includes(shift.status) && Date.parse(shift.start) > Date.now();
+  if (!["open", "applied"].includes(shift.status) && !reassignable)
+    return fail(409, `Shift is already ${shift.status.replace("_", " ")}`);
 
   const { workerId } = await body<{ workerId: string }>(req);
   const worker = db.workers.find((w) => w.id === workerId);
   if (!worker) return fail(400, "Worker not found");
+  if (worker.id === shift.workerId) return fail(409, `${worker.name} is already on this shift`);
 
   // Booking guard: compliance, double-booking, rest and WTR limits are enforced here, not only in the UI.
   const site = db.sites.find((s) => s.id === shift.siteId)!;

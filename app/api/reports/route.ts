@@ -37,7 +37,32 @@ export function GET(req: Request) {
         })
       : null;
 
+  // Phase 2: reliability leaderboard, WTR risk and weekly margin trend.
+  const inScope =
+    c.role === "client_admin"
+      ? new Set(db.shifts.filter((s) => c.siteIds.has(s.siteId) && s.workerId).map((s) => s.workerId))
+      : null;
+  const reliability = db.workers
+    .filter((w) => !inScope || inScope.has(w.id))
+    .map((w) => ({
+      id: w.id, name: w.name, score: w.reliability,
+      noShows: db.shifts.filter((s) => s.workerId === w.id && s.status === "no_show").length,
+    }))
+    .sort((a, b) => b.score - a.score);
+  const wtrRisk = hours.filter((h) => h.hours >= WTR_MAX_HOURS * 0.8);
+
+  const weeks = Array.from({ length: 4 }, (_, i) => {
+    const end = now - i * 7 * 864e5;
+    const ts = db.timesheets.filter((t) => c.siteIds.has(t.siteId) && Date.parse(t.date) <= end && Date.parse(t.date) > end - 7 * 864e5);
+    const revenue = ts.reduce((a, t) => a + t.hours * t.billRate!, 0);
+    const cost = ts.reduce((a, t) => a + t.hours * t.payRate!, 0);
+    return { weekEnding: new Date(end).toISOString(), hours: ts.reduce((a, t) => a + t.hours, 0), revenue, cost, margin: revenue - cost };
+  }).reverse();
+
   return ok({
+    reliability,
+    wtrRisk,
+    weeklyMargin: c.role === "super_admin" ? weeks : null,
     fillRate: pct(past.filter((s) => s.status !== "cancelled").length, past.length),
     noShowRate: pct(worked.filter((s) => s.status === "no_show").length, worked.length),
     shiftsLast14: past.length,

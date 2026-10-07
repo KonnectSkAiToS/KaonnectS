@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Badge, Button, Card, Dialog, Flex, Table, Tabs, Text, TextArea } from "@radix-ui/themes";
+import { Badge, Button, Card, Dialog, Flex, Grid, Table, Tabs, Text, TextArea } from "@radix-ui/themes";
 import { DownloadIcon } from "@radix-ui/react-icons";
 import { ApiError, fmtDate, fmtHours, fmtMoney, useApi, useRole, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
-import type { RateCard, Role, Timesheet } from "@/lib/types";
+import type { PayrollConnection, PayrollProvider, PayrollSync as PayrollSyncRecord, RateCard, Role, Timesheet } from "@/lib/types";
 
 type TS = Timesheet & { workerName: string; siteName: string };
 
@@ -48,7 +48,9 @@ export default function TimesheetsPage() {
                 <Tabs.Trigger key={s} value={s}>{s[0].toUpperCase() + s.slice(1)} <Badge ml="2" color="gray">{all.filter((t) => t.status === s).length}</Badge></Tabs.Trigger>
               ))}
               <Tabs.Trigger value="rates">Rate cards</Tabs.Trigger>
+              {role === "super_admin" && <Tabs.Trigger value="payroll">Payroll sync</Tabs.Trigger>}
             </Tabs.List>
+            {role === "super_admin" && <Tabs.Content value="payroll"><PayrollSync onSynced={reload} /></Tabs.Content>}
             {(["pending", "disputed", "approved"] as const).map((s) => (
               <Tabs.Content key={s} value={s}>
                 <TimesheetTable rows={all.filter((t) => t.status === s)} role={role} onUpdate={update} />
@@ -106,7 +108,7 @@ function TimesheetTable({ rows, role, onUpdate }: { rows: TS[]; role: Role; onUp
                 <Table.Cell>{fmtHours(t.hours)}{t.breakMins > 0 && <Text color="gray" size="1"> ({t.breakMins}m break)</Text>}</Table.Cell>
                 {role !== "client_admin" && <Table.Cell>{fmtMoney(t.hours * t.payRate!)}</Table.Cell>}
                 {role !== "coordinator" && <Table.Cell>{fmtMoney(t.hours * t.billRate!)}</Table.Cell>}
-                <Table.Cell><StatusBadge status={t.status} />{t.note && <Text as="div" size="1" color="gray">{t.note}</Text>}</Table.Cell>
+                <Table.Cell><StatusBadge status={t.status} />{t.syncedTo && <Badge ml="1" color="gray">sent to {t.syncedTo}</Badge>}{t.note && <Text as="div" size="1" color="gray">{t.note}</Text>}</Table.Cell>
                 <Table.Cell>
                   <Flex gap="2">
                     {canApprove && <Button size="1" color="green" onClick={() => onUpdate(t.id, { status: "approved" })}>{t.status === "disputed" ? "Resolve & approve" : "Approve"}</Button>}
@@ -119,6 +121,81 @@ function TimesheetTable({ rows, role, onUpdate }: { rows: TS[]; role: Role; onUp
         </Table.Body>
       </Table.Root>
     </Card>
+  );
+}
+
+interface Payroll {
+  connections: PayrollConnection[];
+  syncs: PayrollSyncRecord[];
+  ready: { lines: number; grossPay: number };
+}
+
+function PayrollSync({ onSynced }: { onSynced: () => void }) {
+  const send = useSend();
+  const { data, error, reload } = useApi<Payroll>("/payroll");
+  const [actionError, setActionError] = useState<ApiError>();
+
+  async function act(action: string, provider: PayrollProvider) {
+    try {
+      setActionError(undefined);
+      await send("/payroll", "POST", { action, provider });
+      reload();
+      if (action === "sync") onSynced();
+    } catch (e) {
+      setActionError(e as ApiError);
+    }
+  }
+
+  return (
+    <Load data={data} error={error}>
+      {({ connections, syncs, ready }) => (
+        <Flex direction="column" gap="4" mt="3">
+          <ErrorCallout error={actionError} />
+          <Text size="2" color="gray">
+            {ready.lines} approved timesheet line{ready.lines !== 1 && "s"} ({fmtMoney(ready.grossPay)} gross) waiting to be sent to payroll.
+          </Text>
+          <Grid columns={{ initial: "1", sm: "3" }} gap="3">
+            {connections.map((c) => (
+              <Card key={c.provider}>
+                <Flex justify="between" align="center" mb="2">
+                  <Text weight="bold">{c.provider}</Text>
+                  <Badge color={c.connected ? "green" : "gray"}>{c.connected ? "connected" : "not connected"}</Badge>
+                </Flex>
+                {c.connected && <Text as="p" size="1" color="gray" mb="3">{c.orgName} · since {fmtDate(c.connectedAt!)}</Text>}
+                <Flex gap="2">
+                  {c.connected ? (
+                    <>
+                      <Button size="1" disabled={!ready.lines} onClick={() => act("sync", c.provider)}>Send pay run</Button>
+                      <Button size="1" variant="soft" color="gray" onClick={() => act("disconnect", c.provider)}>Disconnect</Button>
+                    </>
+                  ) : <Button size="1" variant="soft" onClick={() => act("connect", c.provider)}>Connect</Button>}
+                </Flex>
+              </Card>
+            ))}
+          </Grid>
+          <Card style={{ overflowX: "auto" }}>
+            <Text as="div" weight="bold" mb="2">Sync history</Text>
+            <Table.Root size="1">
+              <Table.Header><Table.Row>
+                <Table.ColumnHeaderCell>When</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Provider</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Lines</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Gross pay</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Result</Table.ColumnHeaderCell><Table.ColumnHeaderCell>By</Table.ColumnHeaderCell>
+              </Table.Row></Table.Header>
+              <Table.Body>
+                {syncs.map((s) => (
+                  <Table.Row key={s.id}>
+                    <Table.Cell>{fmtDate(s.at)}</Table.Cell><Table.Cell>{s.provider}</Table.Cell>
+                    <Table.Cell>{s.lines}</Table.Cell><Table.Cell>{fmtMoney(s.grossPay)}</Table.Cell>
+                    <Table.Cell><Badge color={s.status === "success" ? "green" : "red"}>{s.status}</Badge> <Text size="1" color="gray">{s.message}</Text></Table.Cell>
+                    <Table.Cell>{s.by}</Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root>
+          </Card>
+        </Flex>
+      )}
+    </Load>
   );
 }
 
