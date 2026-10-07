@@ -14,7 +14,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100";
 const WEB_API = `${API_URL}/web/v1`;
 
 /** Pages already served by the real API. Everything else still uses the in-app dummy API until migrated. */
-const MIGRATED = [/^\/dashboard(?:[/?]|$)/, /^\/workers(?:[/?]|$)/];
+const MIGRATED = [
+  /^\/dashboard(?:[/?]|$)/,
+  /^\/workers(?:[/?]|$)/,
+  /^\/clients(?:[/?]|$)/,
+  /^\/sites(?:[/?]|$)/,
+];
 
 /**
  * Prefix a path with "dummy:" to force the in-app dummy API even when the path is migrated.

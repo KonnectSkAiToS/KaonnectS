@@ -99,7 +99,7 @@ function InvoiceTable({ rows }: { rows: Row[] }) {
 
 function GenerateInvoice({ onCreated }: { onCreated: (id: string) => void }) {
   const send = useSend();
-  const { data: clients } = useApi<Client[]>("/clients");
+  const { data: clients } = useApi<Client[]>("dummy:/clients");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const now = new Date();

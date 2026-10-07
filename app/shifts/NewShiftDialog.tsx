@@ -13,7 +13,7 @@ const SKILLS: Record<Client["sector"], Skill[]> = {
 };
 
 export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
-  const { data: clients } = useApi<(Client & { sites: Site[] })[]>("/clients");
+  const { data: clients } = useApi<(Client & { sites: Site[] })[]>("dummy:/clients");
   const send = useSend();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();

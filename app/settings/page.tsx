@@ -38,7 +38,7 @@ export default function SettingsPage() {
 function Users() {
   const send = useSend();
   const { data, error, reload } = useApi<U[]>("/users");
-  const { data: clients } = useApi<ClientWithSites[]>("/clients");
+  const { data: clients } = useApi<ClientWithSites[]>("dummy:/clients");
   const [actionError, setActionError] = useState<ApiError>();
 
   async function patch(id: string, b: object) {
