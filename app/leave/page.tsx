@@ -153,7 +153,7 @@ function LeaveCalendar({ rows }: { rows: Row[] }) {
 
 function RecordLeave({ onSaved }: { onSaved: () => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("/workers");
+  const { data: workers } = useApi<Worker[]>("dummy:/workers");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const today = iso(new Date());

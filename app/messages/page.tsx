@@ -163,7 +163,7 @@ function ThreadView({ id, onSent, onBack }: { id: string; onSent: () => void; on
 
 function NewConversation({ onCreated }: { onCreated: (id: string) => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("/workers");
+  const { data: workers } = useApi<Worker[]>("dummy:/workers");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const [f, setF] = useState({ workerId: "", subject: "", body: "" });

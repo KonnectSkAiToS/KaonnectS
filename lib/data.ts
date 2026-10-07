@@ -171,7 +171,7 @@ function build(): DB {
       { id: "rr5", category: "Audit log", months: 84, basis: "after the event" },
     ],
     tenants: [
-      { id: "t1", name: "Kaitos Staffing", slug: "kaitos", domain: "admin.kaitos.example", brandColor: "indigo", plan: "growth", status: "active", createdAt: at(-400, 9), adminEmail: "priya@agency.example" },
+      { id: "t1", name: "Kaitos Staffing", slug: "kaitos", domain: "admin.kaitos.example", brandColor: "indigo", plan: "growth", status: "active", createdAt: at(-400, 9), adminEmail: "admin@kaitos.com" },
       { id: "t2", name: "CarePoint Recruitment", slug: "carepoint", domain: "portal.carepoint.example", brandColor: "teal", plan: "starter", status: "active", createdAt: at(-90, 11), adminEmail: "ops@carepoint.example" },
       { id: "t3", name: "Northern Hospitality Staff", slug: "northern", domain: "staff.northernhs.example", brandColor: "crimson", plan: "growth", status: "trial", createdAt: at(-9, 15), adminEmail: "admin@northernhs.example" },
       { id: "t4", name: "BlueCross Nursing Bank", slug: "bluecross", domain: "bank.bluecross.example", brandColor: "blue", plan: "enterprise", status: "suspended", createdAt: at(-200, 10), adminEmail: "it@bluecross.example" },
@@ -182,9 +182,9 @@ function build(): DB {
       { provider: "BrightPay", connected: false },
     ],
     users: [
-    { id: "u1", name: "Priya Shah", email: "priya@agency.example", role: "super_admin", clientIds: null, status: "active" },
-    { id: "u2", name: "Tom Reed", email: "tom@agency.example", role: "coordinator", clientIds: ["c1", "c2"], status: "active" },
-    { id: "u3", name: "Helen Ward", email: "helen@oakwoodcare.example", role: "client_admin", clientIds: ["c1"], status: "active" },
+    { id: "u1", name: "Priya Shah", email: "admin@kaitos.com", role: "super_admin", clientIds: null, status: "active" },
+    { id: "u2", name: "Tom Reed", email: "coordinator@kaitos.com", role: "coordinator", clientIds: ["c1", "c2"], status: "active" },
+    { id: "u3", name: "Helen Ward", email: "clientadmin@kaitos.com", role: "client_admin", clientIds: ["c1"], status: "active" },
     { id: "u4", name: "Marcus Lee", email: "marcus@riversidehotels.example", role: "client_admin", clientIds: ["c2"], status: "active" },
     { id: "u5", name: "Aisha Khan", email: "aisha@agency.example", role: "coordinator", clientIds: ["c3"], status: "active" },
   ] };
@@ -317,8 +317,8 @@ function build(): DB {
 }
 
 // Bump the key when the data shape changes so a running dev server reseeds.
-const g = globalThis as unknown as { __staffingDbV8?: DB };
-export const db: DB = (g.__staffingDbV8 ??= build());
+const g = globalThis as unknown as { __staffingDbV9?: DB };
+export const db: DB = (g.__staffingDbV9 ??= build());
 
 export function audit(actor: string, action: string, detail: string) {
   db.audit.unshift({ id: `au${db.audit.length + 1}`, at: new Date().toISOString(), actor, action, detail });

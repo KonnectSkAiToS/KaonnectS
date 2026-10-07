@@ -32,7 +32,7 @@ export default function RotaPage() {
   const to = monday(week + 1);
   const days = Array.from({ length: 7 }, (_, i) => new Date(from.getTime() + i * 864e5));
   const { data, error, reload } = useApi<ShiftView[]>(`/shifts?from=${from.toISOString()}&to=${to.toISOString()}`);
-  const { data: workers } = useApi<Worker[]>(by === "worker" ? "/workers" : null);
+  const { data: workers } = useApi<Worker[]>(by === "worker" ? "dummy:/workers" : null);
   const today = new Date().toDateString();
   const canDrag = by === "worker" && role !== "client_admin";
 

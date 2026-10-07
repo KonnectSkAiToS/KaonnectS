@@ -175,7 +175,7 @@ function ViewDocument({ doc }: { doc: Doc }) {
 
 function UploadDocument({ onSaved }: { onSaved: () => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("/workers");
+  const { data: workers } = useApi<Worker[]>("dummy:/workers");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const empty = { workerId: "", type: "" as DocType | "", expiresOn: "", file: null as File | null };
