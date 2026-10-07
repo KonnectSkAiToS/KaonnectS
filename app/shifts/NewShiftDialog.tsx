@@ -1,35 +1,54 @@
 "use client";
-import { useState } from "react";
-import { Button, Checkbox, Dialog, Flex, Select, Text, TextField } from "@radix-ui/themes";
+import { useEffect, useState } from "react";
+import { Button, Checkbox, Dialog, Flex, SegmentedControl, Select, Text, TextArea, TextField } from "@radix-ui/themes";
 import { PlusIcon } from "@radix-ui/react-icons";
-import { SearchSelect } from "@/components/SearchSelect";
-import { ApiError, useApi, useSend } from "@/lib/client";
+import { ApiError, addDays, ukDate, useApi, useSend } from "@/lib/client";
 import { ErrorCallout } from "@/components/ui";
+import { SearchSelect } from "@/components/SearchSelect";
 import type { Client, Site, Skill } from "@/lib/types";
 
-const SKILLS: Record<Client["sector"], Skill[]> = {
+export const SKILLS: Record<Client["sector"], Skill[]> = {
   care: ["Carer", "Senior Carer", "Nurse"],
   hospitality: ["Kitchen Porter", "Waiting Staff", "Housekeeping", "Chef"],
 };
+// Common shift patterns; "custom" keeps whatever times are typed.
+const PRESETS: Record<string, [string, string]> = { early: ["07:00", "15:00"], late: ["14:00", "22:00"], long: ["08:00", "20:00"], night: ["21:00", "07:00"] };
 
-export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
-  const { data: clients } = useApi<(Client & { sites: Site[] })[]>("dummy:/clients");
+/**
+ * Post a shift. Used from the Shifts page (own trigger button) and from the Rota, which opens it
+ * pre-filled for a site and day via `open` / `defaults`.
+ */
+export function NewShiftDialog({ onCreated, open: openProp, onOpenChange, defaults, trigger = true }: {
+  onCreated: () => void;
+  open?: boolean;
+  onOpenChange?: (o: boolean) => void;
+  defaults?: { siteId?: string; date?: string };
+  trigger?: boolean;
+}) {
+  const { data: clients } = useApi<(Client & { sites: Site[] })[]>("/clients");
   const send = useSend();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = openProp ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const [error, setError] = useState<ApiError>();
-  const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
-  const [f, setF] = useState({ siteId: "", role: "", date: tomorrow, startTime: "08:00", endTime: "16:00", urgent: false });
+  const today = ukDate(new Date());
+  const blank = () => ({ siteId: defaults?.siteId ?? "", role: "", date: defaults?.date ?? addDays(today, 1), startTime: "07:00", endTime: "15:00", urgent: false, notes: "" });
+  const [f, setF] = useState(blank);
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }));
 
-  const sites = clients?.flatMap((c) => c.sites.map((s) => ({ ...s, sector: c.sector }))) ?? [];
-  const sector = sites.find((s) => s.id === f.siteId)?.sector;
+  // Re-apply the Rota's site/day each time it opens the dialog.
+  useEffect(() => { if (open) { setF(blank()); setError(undefined); } }, [open, defaults?.siteId, defaults?.date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clientOf = (siteId: string) => clients?.find((c) => c.sites.some((s) => s.id === siteId));
+  const sector = clientOf(f.siteId)?.sector;
+  const preset = Object.entries(PRESETS).find(([, [a, b]]) => a === f.startTime && b === f.endTime)?.[0] ?? "custom";
+  const overnight = f.endTime <= f.startTime;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await send("/shifts", "POST", f);
+      await send("/shifts", "POST", { ...f, notes: f.notes.trim() || null });
       setOpen(false);
-      setError(undefined);
       onCreated();
     } catch (err) {
       setError(err as ApiError);
@@ -38,10 +57,10 @@ export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger><Button><PlusIcon /> Post shift</Button></Dialog.Trigger>
-      <Dialog.Content maxWidth="460px">
+      {trigger && <Dialog.Trigger><Button><PlusIcon /> Post shift</Button></Dialog.Trigger>}
+      <Dialog.Content maxWidth="480px">
         <Dialog.Title>Post a shift</Dialog.Title>
-        <Dialog.Description size="2" mb="4" color="gray">Pay and bill rates are taken from the client's rate card.</Dialog.Description>
+        <Dialog.Description size="2" mb="4" color="gray">Times are UK time. Pay and bill rates come from the client's rate card.</Dialog.Description>
         <ErrorCallout error={error} />
         <form onSubmit={submit}>
           <Flex direction="column" gap="3">
@@ -59,8 +78,18 @@ export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Date</Text>
-              <TextField.Root type="date" value={f.date} min={tomorrow} onChange={(e) => set({ date: e.target.value })} required />
+              <TextField.Root type="date" value={f.date} min={today} onChange={(e) => set({ date: e.target.value })} required />
             </label>
+            <div>
+              <Text as="div" size="2" weight="medium" mb="1">Shift</Text>
+              <SegmentedControl.Root size="1" value={preset} onValueChange={(p) => { if (PRESETS[p]) set({ startTime: PRESETS[p][0], endTime: PRESETS[p][1] }); }}>
+                <SegmentedControl.Item value="early">Early 7–3</SegmentedControl.Item>
+                <SegmentedControl.Item value="late">Late 2–10</SegmentedControl.Item>
+                <SegmentedControl.Item value="long">Long day</SegmentedControl.Item>
+                <SegmentedControl.Item value="night">Night</SegmentedControl.Item>
+                <SegmentedControl.Item value="custom">Custom</SegmentedControl.Item>
+              </SegmentedControl.Root>
+            </div>
             <Flex gap="3">
               <label style={{ flex: 1 }}>
                 <Text as="div" size="2" weight="medium" mb="1">Start</Text>
@@ -71,6 +100,11 @@ export function NewShiftDialog({ onCreated }: { onCreated: () => void }) {
                 <TextField.Root type="time" value={f.endTime} onChange={(e) => set({ endTime: e.target.value })} required />
               </label>
             </Flex>
+            {overnight && <Text size="1" color="gray">Ends the next morning (overnight shift).</Text>}
+            <label>
+              <Text as="div" size="2" weight="medium" mb="1">Notes for the worker (optional)</Text>
+              <TextArea rows={2} maxLength={1000} placeholder="e.g. Use the side entrance, ask for the unit manager" value={f.notes} onChange={(e) => set({ notes: e.target.value })} />
+            </label>
             <Text as="label" size="2"><Flex gap="2" align="center"><Checkbox checked={f.urgent} onCheckedChange={(v) => set({ urgent: v === true })} /> Mark as urgent</Flex></Text>
           </Flex>
           <Flex gap="3" mt="5" justify="end">

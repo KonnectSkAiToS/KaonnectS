@@ -19,6 +19,7 @@ const MIGRATED = [
   /^\/workers(?:[/?]|$)/,
   /^\/clients(?:[/?]|$)/,
   /^\/sites(?:[/?]|$)/,
+  /^\/shifts(?:[/?]|$)/,
 ];
 
 /**
@@ -193,9 +194,36 @@ export function useSend() {
   );
 }
 
-// ponytail: browser-local time; pin to Europe/London once the backend stores UTC with a site timezone.
-export const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
-export const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+// The agency works in UK time: shift times show as Europe/London whatever the viewer's zone.
+export const TZ = "Europe/London";
+// Calendar dates ("2026-10-10", optionally "T00:00") are days, not instants: show them as written.
+const CALENDAR_DATE = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00)?)?$/;
+export const fmtDate = (iso: string) => {
+  const day = CALENDAR_DATE.exec(iso)?.[1];
+  return day
+    ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "short" })
+    : new Date(iso).toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "2-digit", month: "short" });
+};
+export const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+
+/** YYYY-MM-DD of an instant in UK time (for grouping shifts by day). */
+export const ukDate = (iso: string | Date) => new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ });
+/** Adds days to a YYYY-MM-DD date. */
+export const addDays = (day: string, n: number) => {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+/** Monday (YYYY-MM-DD) of the UK week containing `day`. */
+export const mondayOf = (day: string) => addDays(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
+/** UTC instant (ISO) of 00:00 UK time on `day` — for API date-range filters. */
+export const ukMidnight = (day: string) => {
+  const guess = Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    .formatToParts(guess).map((x) => [x.type, x.value]));
+  const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  return new Date(guess - (shown - guess)).toISOString();
+};
 export const fmtDateTime = (iso: string) => `${fmtDate(iso)}, ${fmtTime(iso)}`;
 export const fmtMoney = (n?: number) => (n === undefined ? "—" : n.toLocaleString("en-GB", { style: "currency", currency: "GBP" }));
 export const fmtHours = (h: number) => `${Math.round(h * 100) / 100}h`;

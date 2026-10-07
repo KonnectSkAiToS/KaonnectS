@@ -63,11 +63,16 @@ let seed = 42;
 const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
 const pick = <T,>(a: T[]) => a[Math.floor(rand() * a.length)];
 
+/** Instant when UK wall-clock reads h:m on (today + dayOffset). Demo shift times are UK times. */
 function at(dayOffset: number, h: number, m = 0) {
   const d = new Date();
   d.setDate(d.getDate() + dayOffset);
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
+  const guess = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(guess).map((x) => [x.type, x.value]));
+  const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  return new Date(guess - (shown - guess)).toISOString();
 }
 const dateOnly = (dayOffset: number) => localDate(at(dayOffset, 12));
 
@@ -317,8 +322,8 @@ function build(): DB {
 }
 
 // Bump the key when the data shape changes so a running dev server reseeds.
-const g = globalThis as unknown as { __staffingDbV9?: DB };
-export const db: DB = (g.__staffingDbV9 ??= build());
+const g = globalThis as unknown as { __staffingDbV10?: DB };
+export const db: DB = (g.__staffingDbV10 ??= build());
 
 export function audit(actor: string, action: string, detail: string) {
   db.audit.unshift({ id: `au${db.audit.length + 1}`, at: new Date().toISOString(), actor, action, detail });

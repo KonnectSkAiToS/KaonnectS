@@ -55,3 +55,14 @@ a { color: inherit; }
 /* Page background before Radix Themes mounts, matched to the theme class set in <head>. */
 html.light body { background: #fff; }
 html.dark body { background: #111113; }
+
+/* Rota: shift chips are buttons; empty-day "+" appears on hover (always visible on touch). */
+button.chip { all: unset; display: block; box-sizing: border-box; width: 100%; font-size: 11px; line-height: 1.3; padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; border-left: 3px solid; cursor: pointer; }
+button.chip:focus-visible { outline: 2px solid var(--accent-8); }
+.add-shift { all: unset; display: flex; align-items: center; justify-content: center; width: 100%; height: 22px; border-radius: 4px; color: var(--gray-10); border: 1px dashed var(--gray-a6); opacity: 0; cursor: pointer; }
+.rota .cell:hover .add-shift, .add-shift:focus-visible { opacity: 1; }
+.add-shift:hover { background: var(--accent-a3); color: var(--accent-11); }
+@media (hover: none) { .add-shift { opacity: 1; } }
+
+/* Side panel (sheet) for managing a shift from the rota. */
+.rt-DialogContent.sheet { position: fixed; top: 0; right: 0; height: 100vh; max-height: 100vh; width: min(720px, 100vw); max-width: 100vw; border-radius: 0; margin: 0; overflow-y: auto; animation: none; }
