@@ -1,0 +1,35 @@
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; }
+
+.sidebar { width: 232px; flex-shrink: 0; border-right: 1px solid var(--gray-a5); background: var(--gray-a2); transition: width .15s; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar.collapsed { width: 60px; }
+.sidebar.collapsed .label { display: none; }
+.sidebar.collapsed .brand { justify-content: center; }
+.sidebar.collapsed .navlink { justify-content: center; padding: 10px 0; }
+.navlink { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-2); text-decoration: none; font-size: var(--font-size-2); color: var(--gray-11); }
+.navlink:hover { background: var(--gray-a3); color: var(--gray-12); }
+.navlink.active { background: var(--accent-a3); color: var(--accent-11); font-weight: 500; }
+.topbar { background: var(--color-background); position: sticky; top: 0; z-index: 2; }
+.menu-btn { display: none !important; }
+.rowlink { cursor: pointer; }
+.rowlink:hover { background: var(--gray-a2); }
+
+.rota { display: grid; grid-template-columns: 160px repeat(7, minmax(120px, 1fr)); gap: 1px; background: var(--gray-a5); border: 1px solid var(--gray-a5); border-radius: var(--radius-3); overflow: hidden; min-width: 1000px; }
+.rota > div { background: var(--color-panel-solid); padding: 6px; min-height: 64px; }
+.rota .head { min-height: auto; font-size: var(--font-size-1); font-weight: 600; color: var(--gray-11); background: var(--gray-2); }
+.rota .today { background: var(--accent-2); }
+.chip { display: block; font-size: 11px; line-height: 1.3; padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; text-decoration: none; border-left: 3px solid; }
+
+.bar { height: 8px; border-radius: 4px; background: var(--gray-a4); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent-9); }
+
+@media (max-width: 768px) {
+  .sidebar { position: fixed; height: auto; inset: 0 auto 0 0; z-index: 10; transform: translateX(-100%); transition: transform .2s; background: var(--color-panel-solid); }
+  .sidebar.open { transform: none; box-shadow: var(--shadow-5); }
+  .menu-btn { display: inline-flex !important; }
+  .collapse-btn { display: none !important; }
+  .sidebar.collapsed { width: 232px; }
+  .sidebar.collapsed .label { display: initial; }
+  .sidebar.collapsed .navlink { justify-content: flex-start; padding: 8px 10px; }
+}
