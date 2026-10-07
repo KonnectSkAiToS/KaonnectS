@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Avatar, Box, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import {
   BarChartIcon, CalendarIcon, ChatBubbleIcon, ClockIcon, DashboardIcon, FileTextIcon, GearIcon,
-  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, ListBulletIcon, MoonIcon, PersonIcon, SunIcon,
+  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, PersonIcon, SunIcon,
 } from "@radix-ui/react-icons";
 import { ROLE_LABEL, useRole } from "@/lib/client";
 import { useThemeMode, type ThemeMode } from "./AppTheme";
@@ -24,7 +24,9 @@ const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[] }
   { href: "/reports", label: "Reports", icon: <BarChartIcon />, roles: ALL },
   { href: "/leave", label: "Leave", icon: <SunIcon />, roles: ALL },
   { href: "/messages", label: "Messages", icon: <ChatBubbleIcon />, roles: ["super_admin", "coordinator"] },
+  { href: "/invoices", label: "Invoices", icon: <ReaderIcon />, roles: ["super_admin", "client_admin"] },
   { href: "/settings", label: "Settings & Audit", icon: <GearIcon />, roles: ["super_admin"] },
+  { href: "/platform", label: "Platform & Tenants", icon: <LayersIcon />, roles: ["super_admin"] },
 ];
 
 const THEME_ICON: Record<ThemeMode, React.ReactNode> = { light: <SunIcon />, dark: <MoonIcon />, system: <DesktopIcon /> };
@@ -40,7 +42,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false); // mobile drawer
   const [collapsed, setCollapsed] = useState(false); // desktop icon-only rail
-  const { mode, setMode } = useThemeMode();
+  const { mode, setMode, brand } = useThemeMode();
 
   useEffect(() => {
     try { setCollapsed(localStorage.getItem("sidebar") === "collapsed"); } catch {}
@@ -59,7 +61,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <nav>
           <Flex direction="column" gap="1" p="3" height="100%">
             <Flex align="center" justify="between" mb="3" className="brand">
-              <Text size="3" weight="bold" ml="2" className="label">Staffing Admin</Text>
+              <Text size="3" weight="bold" ml="2" className="label" truncate>{brand.name}</Text>
               <Tooltip content={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
                 <IconButton variant="ghost" color="gray" className="collapse-btn" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
                   {collapsed ? <DoubleArrowRightIcon /> : <DoubleArrowLeftIcon />}

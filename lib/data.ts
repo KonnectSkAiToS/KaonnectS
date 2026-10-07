@@ -1,10 +1,39 @@
 // Hardcoded in-memory data. Resets when the dev server restarts.
 // ponytail: in-memory store, swap for the real API/Postgres when the backend exists.
 import { BASE_DOCS, CARE_DOCS, HOSPITALITY_DOCS, bookingBlockers, hours, isCareWorker, localDate, reliabilityOf } from "./rules";
+import { createInvoice, issueInvoice } from "./billing";
 import type {
-  AttendanceEvent, AuditEntry, Client, Conversation, LeaveRequest, Message, PayrollConnection, PayrollSync,
-  RateCard, Shift, Site, Skill, Timesheet, User, Worker, WorkerDocument,
+  AttendanceEvent, AuditEntry, Client, Conversation, Invoice, LeaveRequest, Message, PayrollConnection, PayrollSync,
+  NotificationTemplate, RateCard, RetentionRule, Shift, Site, Skill, Tenant, Timesheet, User, Worker, WorkerDocument,
 } from "./types";
+
+// Starting rates per role, before weekend/night uplifts. Bill rate = pay × 1.32 (agency margin).
+export const BASE_PAY: Record<"care" | "hospitality", Partial<Record<Skill, number>>> = {
+  care: { Carer: 12.6, "Senior Carer": 14, Nurse: 24 },
+  hospitality: { "Kitchen Porter": 12.3, "Waiting Staff": 12.4, Housekeeping: 12.3, Chef: 15.5 },
+};
+export const DEFAULT_MARGIN = 1.32;
+
+export function defaultRateCards(c: Client, startIndex: number): RateCard[] {
+  const out: RateCard[] = [];
+  for (const [role, base] of Object.entries(BASE_PAY[c.sector])) {
+    for (const [dayType, uplift] of [["weekday", 1], ["weekend", 1.1], ["night", 1.15]] as const) {
+      const payRate = +(base! * uplift).toFixed(2);
+      out.push({ id: `r${startIndex + out.length + 1}`, clientId: c.id, role: role as Skill, dayType, payRate, billRate: +(payRate * DEFAULT_MARGIN).toFixed(2) });
+    }
+  }
+  return out;
+}
+
+const DEFAULT_TEMPLATES: Omit<NotificationTemplate, "id" | "enabled">[] = [
+  { event: "shift.matched", channel: "push", body: "New {{role}} shift at {{site}} on {{date}}, {{start}}–{{end}}. Tap to apply." },
+  { event: "shift.confirmed", channel: "push", body: "You're booked: {{role}} at {{site}}, {{date}} {{start}}–{{end}}." },
+  { event: "shift.cancelled", channel: "sms", body: "Your shift at {{site}} on {{date}} has been cancelled. Sorry for the change. {{agency}}" },
+  { event: "shift.reminder", channel: "push", body: "Reminder: your shift at {{site}} starts at {{start}}. Check in when you arrive." },
+  { event: "document.expiring", channel: "email", subject: "Your {{document}} expires on {{expiry}}", body: "Hi {{workerName}},\n\nYour {{document}} expires on {{expiry}}. Please upload a new copy in the app so we can keep booking you.\n\n{{agency}}" },
+  { event: "leave.decided", channel: "push", body: "Your {{leaveType}} request for {{dates}} was {{decision}}." },
+  { event: "timesheet.approved", channel: "push", body: "Your timesheet for {{date}} at {{site}} ({{hours}}h) was approved." },
+];
 
 export interface DB {
   clients: Client[];
@@ -22,6 +51,11 @@ export interface DB {
   messages: Message[];
   payrollConnections: PayrollConnection[];
   payrollSyncs: PayrollSync[];
+  invoices: Invoice[];
+  tenants: Tenant[];
+  currentTenantId: string; // the agency whose data this portal shows
+  templates: NotificationTemplate[];
+  retention: RetentionRule[];
 }
 
 // Deterministic PRNG so the data looks the same every restart.
@@ -112,16 +146,7 @@ function build(): DB {
   }
 
   const rateCards: RateCard[] = [];
-  const careRates: Partial<Record<Skill, number>> = { Carer: 12.6, "Senior Carer": 14, Nurse: 24 };
-  const hospRates: Partial<Record<Skill, number>> = { "Kitchen Porter": 12.2, "Waiting Staff": 12.4, Housekeeping: 12.2, Chef: 15.5 };
-  for (const c of clients) {
-    for (const [role, base] of Object.entries(c.sector === "care" ? careRates : hospRates)) {
-      for (const [dayType, uplift] of [["weekday", 1], ["weekend", 1.1], ["night", 1.15]] as const) {
-        const payRate = +(base! * uplift).toFixed(2);
-        rateCards.push({ id: `r${rateCards.length + 1}`, clientId: c.id, role: role as Skill, dayType, payRate, billRate: +(payRate * 1.32).toFixed(2) });
-      }
-    }
-  }
+  for (const c of clients) rateCards.push(...defaultRateCards(c, rateCards.length));
 
   // Approved/pending leave is seeded before shifts so seeded bookings respect it.
   for (const id of ["w2", "w20", "w27", "w30"]) workers.find((w) => w.id === id)!.contractType = "PAYE"; // holiday needs an eligible contract
@@ -136,18 +161,32 @@ function build(): DB {
   ];
 
   const db: DB = { clients, sites, workers, documents, shifts: [], attendance: [], timesheets: [], rateCards, audit: [], leave,
-    conversations: [], messages: [], payrollSyncs: [],
+    conversations: [], messages: [], payrollSyncs: [], invoices: [], currentTenantId: "t1",
+    templates: DEFAULT_TEMPLATES.map((t, i) => ({ ...t, id: `nt${i + 1}`, enabled: true })),
+    retention: [
+      { id: "rr1", category: "DBS certificates & right-to-work documents", months: 24, basis: "after the worker leaves" },
+      { id: "rr2", category: "Timesheets & payroll records", months: 72, basis: "after the end of the tax year" },
+      { id: "rr3", category: "Check-in / check-out GPS data", months: 12, basis: "after the shift" },
+      { id: "rr4", category: "Messages", months: 36, basis: "after the last message" },
+      { id: "rr5", category: "Audit log", months: 84, basis: "after the event" },
+    ],
+    tenants: [
+      { id: "t1", name: "Kaitos Staffing", slug: "kaitos", domain: "admin.kaitos.example", brandColor: "indigo", plan: "growth", status: "active", createdAt: at(-400, 9), adminEmail: "priya@agency.example" },
+      { id: "t2", name: "CarePoint Recruitment", slug: "carepoint", domain: "portal.carepoint.example", brandColor: "teal", plan: "starter", status: "active", createdAt: at(-90, 11), adminEmail: "ops@carepoint.example" },
+      { id: "t3", name: "Northern Hospitality Staff", slug: "northern", domain: "staff.northernhs.example", brandColor: "crimson", plan: "growth", status: "trial", createdAt: at(-9, 15), adminEmail: "admin@northernhs.example" },
+      { id: "t4", name: "BlueCross Nursing Bank", slug: "bluecross", domain: "bank.bluecross.example", brandColor: "blue", plan: "enterprise", status: "suspended", createdAt: at(-200, 10), adminEmail: "it@bluecross.example" },
+    ],
     payrollConnections: [
       { provider: "Xero", connected: true, orgName: "Kaitos Staffing Ltd", connectedAt: at(-45, 10) },
       { provider: "Sage", connected: false },
       { provider: "BrightPay", connected: false },
     ],
     users: [
-    { id: "u1", name: "Priya Shah", email: "priya@agency.example", role: "super_admin", clientIds: null },
-    { id: "u2", name: "Tom Reed", email: "tom@agency.example", role: "coordinator", clientIds: ["c1", "c2"] },
-    { id: "u3", name: "Helen Ward", email: "helen@oakwoodcare.example", role: "client_admin", clientIds: ["c1"] },
-    { id: "u4", name: "Marcus Lee", email: "marcus@riversidehotels.example", role: "client_admin", clientIds: ["c2"] },
-    { id: "u5", name: "Aisha Khan", email: "aisha@agency.example", role: "coordinator", clientIds: ["c3"] },
+    { id: "u1", name: "Priya Shah", email: "priya@agency.example", role: "super_admin", clientIds: null, status: "active" },
+    { id: "u2", name: "Tom Reed", email: "tom@agency.example", role: "coordinator", clientIds: ["c1", "c2"], status: "active" },
+    { id: "u3", name: "Helen Ward", email: "helen@oakwoodcare.example", role: "client_admin", clientIds: ["c1"], status: "active" },
+    { id: "u4", name: "Marcus Lee", email: "marcus@riversidehotels.example", role: "client_admin", clientIds: ["c2"], status: "active" },
+    { id: "u5", name: "Aisha Khan", email: "aisha@agency.example", role: "coordinator", clientIds: ["c3"], status: "active" },
   ] };
 
   // Shifts from 3 weeks ago to 10 days ahead.
@@ -258,6 +297,17 @@ function build(): DB {
     { id: "ps2", provider: "Xero", at: at(-14, 17, 5), lines: 58, grossPay: 5933.2, status: "failed", message: "3 employees missing Xero employee IDs", by: "Priya Shah" },
   ];
 
+  // Invoices: an older week paid (or overdue for c3), last week issued/draft.
+  for (const c of clients) {
+    const older = createInvoice(db, c.id, dateOnly(-21), dateOnly(-15));
+    if (older) {
+      issueInvoice(older, new Date(at(-15, 9)));
+      if (c.id !== "c3") Object.assign(older, { status: "paid", paidAt: at(-3, 10) });
+    }
+    const recent = createInvoice(db, c.id, dateOnly(-14), dateOnly(-8));
+    if (recent && c.id === "c1") issueInvoice(recent, new Date(at(-6, 9)));
+  }
+
   db.audit = [
     { id: "au1", at: at(-2, 9, 12), actor: "Priya Shah", action: "rate_card.updated", detail: "Riverside Hotels · Chef weekday pay £15.50" },
     { id: "au2", at: at(-1, 16, 40), actor: "Tom Reed", action: "document.verified", detail: "Amara Okafor · DBS Enhanced" },
@@ -267,8 +317,8 @@ function build(): DB {
 }
 
 // Bump the key when the data shape changes so a running dev server reseeds.
-const g = globalThis as unknown as { __staffingDbV5?: DB };
-export const db: DB = (g.__staffingDbV5 ??= build());
+const g = globalThis as unknown as { __staffingDbV8?: DB };
+export const db: DB = (g.__staffingDbV8 ??= build());
 
 export function audit(actor: string, action: string, detail: string) {
   db.audit.unshift({ id: `au${db.audit.length + 1}`, at: new Date().toISOString(), actor, action, detail });

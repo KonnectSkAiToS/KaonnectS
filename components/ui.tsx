@@ -1,8 +1,9 @@
 "use client";
 import { Badge, Callout, Flex, Heading, Spinner, Text } from "@radix-ui/themes";
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import type { ComplianceStatus, ShiftStatus } from "@/lib/types";
+import type { ComplianceStatus, Invoice, ShiftStatus } from "@/lib/types";
 import type { ApiError } from "@/lib/client";
+import { NotFound } from "./NotFound";
 
 type Color = React.ComponentProps<typeof Badge>["color"];
 
@@ -57,6 +58,8 @@ export function Loading() {
 
 /** Shows error if any, spinner until data arrives, then children. */
 export function Load<T>({ data, error, children }: { data?: T; error?: ApiError; children: (d: T) => React.ReactNode }) {
+  // A missing record (e.g. /shifts/xyz) gets a proper not-found screen instead of a red error box.
+  if (error?.status === 404) return <NotFound title={error.message} message="It may have been removed, or the link is wrong." />;
   if (error) return <ErrorCallout error={error} />;
   if (data === undefined) return <Loading />;
   return <>{children(data)}</>;
@@ -64,4 +67,10 @@ export function Load<T>({ data, error, children }: { data?: T; error?: ApiError;
 
 export function Empty({ children }: { children: React.ReactNode }) {
   return <Text as="p" color="gray" size="2" my="4">{children}</Text>;
+}
+
+export function InvoiceBadge({ status, overdue }: { status: Invoice["status"]; overdue: boolean }) {
+  if (overdue) return <Badge color="red">overdue</Badge>;
+  const color = { draft: "gray", issued: "blue", paid: "green", void: "gray" } as const;
+  return <Badge color={color[status]} variant={status === "void" ? "outline" : "soft"}>{status}</Badge>;
 }

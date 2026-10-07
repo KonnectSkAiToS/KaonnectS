@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge, Button, Card, Flex, Grid, Table, Tabs, Text } from "@radix-ui/themes";
 import { ApiError, fmtDateTime, fmtTime, useApi, useRole, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
+import { Pager, SortHeader, useTable } from "@/components/table";
 import type { AttendanceEvent, ShiftView } from "@/lib/types";
 
 type Ev = AttendanceEvent & { workerName: string; siteName: string; shiftStart: string; shiftEnd: string };
@@ -92,32 +93,42 @@ export default function AttendancePage() {
                 )}
               </Tabs.Content>
 
-              <Tabs.Content value="log">
-                <Table.Root size="1" mt="3">
-                  <Table.Header><Table.Row>
-                    <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Worker</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Site</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Method</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Distance</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-                  </Table.Row></Table.Header>
-                  <Table.Body>
-                    {events.slice(0, 100).map((e) => (
-                      <Table.Row key={e.id}>
-                        <Table.Cell>{fmtDateTime(e.at)}</Table.Cell>
-                        <Table.Cell>{e.workerName}</Table.Cell>
-                        <Table.Cell>{e.siteName}</Table.Cell>
-                        <Table.Cell>Check-{e.kind}</Table.Cell>
-                        <Table.Cell>{e.method}{e.offlineSynced && <Badge ml="1" color="gray">offline-synced</Badge>}</Table.Cell>
-                        <Table.Cell>{e.method === "manual" ? "—" : `${e.distanceM} m`}</Table.Cell>
-                        <Table.Cell><StatusBadge status={e.status} /></Table.Cell>
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table.Root>
-              </Tabs.Content>
+              <Tabs.Content value="log"><AttendanceLog events={events} /></Tabs.Content>
             </Tabs.Root>
           );
         }}
       </Load>
+    </>
+  );
+}
+
+function AttendanceLog({ events }: { events: Ev[] }) {
+  const tbl = useTable(events, {
+    at: (e) => e.at, worker: (e) => e.workerName, site: (e) => e.siteName, method: (e) => e.method, distance: (e) => e.distanceM, status: (e) => e.status,
+  }, { key: "at", dir: "desc" });
+  return (
+    <>
+      <Table.Root size="1" mt="3">
+        <Table.Header><Table.Row>
+          <SortHeader label="Time" k="at" t={tbl} /><SortHeader label="Worker" k="worker" t={tbl} />
+          <SortHeader label="Site" k="site" t={tbl} /><Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
+          <SortHeader label="Method" k="method" t={tbl} /><SortHeader label="Distance" k="distance" t={tbl} /><SortHeader label="Status" k="status" t={tbl} />
+        </Table.Row></Table.Header>
+        <Table.Body>
+          {tbl.rows.map((e) => (
+            <Table.Row key={e.id}>
+              <Table.Cell>{fmtDateTime(e.at)}</Table.Cell>
+              <Table.Cell>{e.workerName}</Table.Cell>
+              <Table.Cell>{e.siteName}</Table.Cell>
+              <Table.Cell>Check-{e.kind}</Table.Cell>
+              <Table.Cell>{e.method}{e.offlineSynced && <Badge ml="1" color="gray">offline-synced</Badge>}</Table.Cell>
+              <Table.Cell>{e.method === "manual" ? "—" : `${e.distanceM} m`}</Table.Cell>
+              <Table.Cell><StatusBadge status={e.status} /></Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table.Root>
+      <Pager {...tbl.pager} />
     </>
   );
 }

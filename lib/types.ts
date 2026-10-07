@@ -62,6 +62,8 @@ export interface WorkerDocument {
   status: DocStatus;
   uploadedAt: string;
   expiresOn: string | null;
+  sizeKb?: number;
+  lastRemindedAt?: string;
 }
 
 export type ShiftStatus =
@@ -120,6 +122,7 @@ export interface Timesheet {
   status: "pending" | "approved" | "disputed";
   note?: string;
   syncedTo?: "Xero" | "Sage" | "BrightPay";
+  invoiceId?: string;
 }
 
 export interface RateCard {
@@ -137,6 +140,8 @@ export interface User {
   email: string;
   role: Role;
   clientIds: string[] | null; // null = all clients
+  status: "active" | "invited" | "deactivated";
+  invitedAt?: string;
 }
 
 export interface AuditEntry {
@@ -213,4 +218,72 @@ export interface PayrollSync {
   status: "success" | "failed";
   message: string;
   by: string;
+}
+
+// ---- Phase 3 ----
+
+export interface InvoiceLine {
+  timesheetId: string;
+  date: string;
+  workerName: string;
+  siteName: string;
+  role: string;
+  hours: number;
+  rate: number;
+  amount: number;
+}
+
+export type InvoiceStatus = "draft" | "issued" | "paid" | "void";
+
+export interface Invoice {
+  id: string;
+  number: string;
+  clientId: string;
+  periodFrom: string; // YYYY-MM-DD
+  periodTo: string;
+  createdAt: string;
+  issuedAt?: string;
+  dueDate?: string;
+  paidAt?: string;
+  status: InvoiceStatus;
+  lines: InvoiceLine[];
+  subtotal: number;
+  vat: number;
+  total: number;
+}
+
+export type Plan = "starter" | "growth" | "enterprise";
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  domain: string;
+  brandColor: "indigo" | "teal" | "crimson" | "amber" | "violet" | "green" | "blue" | "orange";
+  plan: Plan;
+  status: "active" | "trial" | "suspended";
+  createdAt: string;
+  adminEmail: string;
+}
+
+// ---- Settings ----
+
+export type NotificationEvent =
+  | "shift.matched" | "shift.confirmed" | "shift.cancelled" | "shift.reminder"
+  | "document.expiring" | "leave.decided" | "timesheet.approved";
+
+export interface NotificationTemplate {
+  id: string;
+  event: NotificationEvent;
+  channel: "push" | "sms" | "email";
+  subject?: string; // email only
+  body: string;
+  enabled: boolean;
+}
+
+export interface RetentionRule {
+  id: string;
+  category: string;
+  months: number;
+  basis: string; // what the period counts from
 }

@@ -9,10 +9,13 @@ export interface Ctx {
   clientIds: Set<string>;
 }
 
+const DEMO_USER: Record<Role, string> = { super_admin: "u1", coordinator: "u2", client_admin: "u3" };
+
 // ponytail: role comes from an x-role header set by the role switcher; replace with real JWT auth.
 export function ctx(req: Request): Ctx {
   const role = (req.headers.get("x-role") ?? "super_admin") as Role;
-  const user = db.users.find((u) => u.role === role)!;
+  // The demo signs in as one fixed user per role.
+  const user = db.users.find((u) => u.id === DEMO_USER[role]) ?? db.users[0];
   const clientIds = new Set(user.clientIds ?? db.clients.map((c) => c.id));
   const siteIds = new Set(db.sites.filter((s) => clientIds.has(s.clientId)).map((s) => s.id));
   return { role, user, siteIds, clientIds };

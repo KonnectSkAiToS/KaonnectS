@@ -1,6 +1,8 @@
 import { audit, db } from "@/lib/data";
 import { allow, body, ctx, fail, forbidden, ok } from "@/lib/server";
-import type { Site } from "@/lib/types";
+import type { DocType, Site } from "@/lib/types";
+
+const ALL_DOCS: DocType[] = ["DBS Enhanced", "Manual Handling", "Safeguarding", "Food Hygiene"];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const c = ctx(req);
@@ -12,6 +14,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (b.requiredDocs && !allow(c, "super_admin", "client_admin")) return forbidden();
   if ((b.radiusM !== undefined || b.sitePin !== undefined) && !allow(c, "super_admin")) return forbidden();
   if (b.radiusM !== undefined && !(b.radiusM >= 50 && b.radiusM <= 500)) return fail(400, "Geofence radius must be between 50 and 500 m");
+  if (b.requiredDocs && !b.requiredDocs.every((d) => ALL_DOCS.includes(d))) return fail(400, "Unknown document type");
   if (b.sitePin !== undefined && !/^\d{4}$/.test(b.sitePin)) return fail(400, "Site PIN must be 4 digits");
 
   Object.assign(site, b);

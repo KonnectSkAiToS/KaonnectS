@@ -3,6 +3,8 @@ import type { Candidate, ComplianceStatus, DocType, Shift, Site, Skill, Worker }
 
 
 export const WTR_MAX_HOURS = 48;
+// UK National Living Wage from April 2025. Update each April.
+export const MIN_PAY_RATE = 12.21;
 export const MIN_REST_HOURS = 11;
 export const BASE_DOCS: DocType[] = ["Right to Work", "References"];
 export const CARE_DOCS: DocType[] = ["DBS Enhanced", "Manual Handling", "Safeguarding"];

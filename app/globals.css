@@ -47,3 +47,11 @@ a { color: inherit; }
   .sidebar.collapsed .label { display: initial; }
   .sidebar.collapsed .navlink { justify-content: flex-start; padding: 8px 10px; }
 }
+
+@media print {
+  .sidebar, .menu-btn, .no-print, nextjs-portal { display: none !important; }
+  .invoice { box-shadow: none !important; }
+}
+/* Page background before Radix Themes mounts, matched to the theme class set in <head>. */
+html.light body { background: #fff; }
+html.dark body { background: #111113; }
