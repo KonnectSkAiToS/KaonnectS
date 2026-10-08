@@ -29,7 +29,7 @@ export default function TimesheetsPage() {
 
   async function exportCsv() {
     try {
-      await downloadFile(role, "/timesheets/export", `payrun-${ukDate(new Date())}.csv`);
+      await downloadFile("/timesheets/export", `payrun-${ukDate(new Date())}.csv`);
     } catch (e) {
       setActionError(e as ApiError);
     }

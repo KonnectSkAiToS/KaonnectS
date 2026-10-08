@@ -3,7 +3,7 @@ import { Suspense, useDeferredValue, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge, Button, Card, Dialog, Flex, Select, Switch, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from "@radix-ui/react-icons";
-import { ApiError, downloadFile, ukDate, ROLE_LABEL, fmtDate, fmtDateTime, useApi, useAuth, useRole, useSend } from "@/lib/client";
+import { ApiError, downloadFile, ukDate, ROLE_LABEL, fmtDate, fmtDateTime, useApi, useAuth, useSend } from "@/lib/client";
 import { ErrorCallout, Load, PageHeader } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
 import type { AuditEntry, Client, Role, Site, User } from "@/lib/types";
@@ -170,7 +170,6 @@ function UserDialog({ user, clients, onSaved }: { user?: U; clients: ClientWithS
 // ---------- Audit log ----------
 
 function Audit() {
-  const { role } = useRole();
   const [q, setQ] = useState("");
   const [range, setRange] = useState({ from: "", to: "" });
   // Filtering runs on the server (the log grows forever); deferring keeps typing smooth.
@@ -181,7 +180,7 @@ function Audit() {
   async function exportCsv() {
     const params = new URLSearchParams(Object.entries(range).filter(([, v]) => v));
     try {
-      await downloadFile(role, `/audit/export?${params}`, `audit-log-${ukDate(new Date())}.csv`);
+      await downloadFile(`/audit/export?${params}`, `audit-log-${ukDate(new Date())}.csv`);
     } catch (e) {
       setExportError(e as ApiError);
     }

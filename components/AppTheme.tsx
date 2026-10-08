@@ -1,7 +1,7 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Theme } from "@radix-ui/themes";
-import { api } from "@/lib/client";
+import { loadBrand } from "@/lib/client";
 import { STORE_KEY, useAppStore, type Brand, type ThemeMode } from "@/lib/store";
 
 export type { Brand, ThemeMode } from "@/lib/store";
@@ -15,12 +15,7 @@ export function useThemeMode() {
   const mode = useAppStore((s) => s.themeMode);
   const setMode = useAppStore((s) => s.setThemeMode);
   const brand = useAppStore((s) => s.brand) ?? initial;
-  const reloadBrand = useCallback(() => {
-    api<Brand>(useAppStore.getState().user?.role ?? "client_admin", "/tenant")
-      .then((t) => useAppStore.getState().setBrand({ name: t.name, brandColor: t.brandColor }))
-      .catch(() => {});
-  }, []);
-  return { mode, setMode, brand, reloadBrand };
+  return { mode, setMode, brand, reloadBrand: loadBrand };
 }
 
 /**
@@ -56,6 +51,8 @@ export function AppTheme({ initialBrand, children }: { initialBrand: Brand; chil
   useEffect(() => {
     if (hydrated) applyAppearance(mode === "dark" || (mode === "system" && systemDark));
   }, [hydrated, mode, systemDark]);
+
+  useEffect(() => { document.title = `${brand.name} · Admin`; }, [brand.name]);
 
   return (
     <InitialBrand.Provider value={initialBrand}>
