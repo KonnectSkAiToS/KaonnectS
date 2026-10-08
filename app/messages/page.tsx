@@ -9,7 +9,7 @@ import { Empty, ErrorCallout, Load, Loading, PageHeader } from "@/components/ui"
 import type { Conversation, Message, ShiftView, Worker } from "@/lib/types";
 
 type Summary = Conversation & { workerName: string; last?: Message; count: number };
-interface Thread { conversation: Conversation; worker: Worker; shift: ShiftView | null; messages: Message[] }
+interface Thread { conversation: Conversation; worker: Pick<Worker, "id" | "name" | "phone">; shift: Pick<ShiftView, "id" | "role" | "siteName" | "start"> | null; messages: Message[] }
 
 const initials = (name: string) => name.split(" ").map((p) => p[0]).slice(0, 2).join("");
 const sameDay = (a: string, b: string) => new Date(a).toDateString() === new Date(b).toDateString();
@@ -163,7 +163,7 @@ function ThreadView({ id, onSent, onBack }: { id: string; onSent: () => void; on
 
 function NewConversation({ onCreated }: { onCreated: (id: string) => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("dummy:/workers");
+  const { data: workers } = useApi<Worker[]>("/workers");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const [f, setF] = useState({ workerId: "", subject: "", body: "" });
