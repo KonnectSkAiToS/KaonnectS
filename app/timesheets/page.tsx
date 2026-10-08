@@ -283,7 +283,7 @@ function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; on
                 <Text as="div" size="2" weight="medium" mb="1">Role</Text>
                 <SearchSelect noun="role" placeholder="Choose role" value={f.role} onChange={(role) => setF({ ...f, role })}
                   options={forSector().map((r) => ({ id: r, label: r }))} />
-                <Text size="1"><Link href="/settings?tab=roles">Manage roles</Link></Text>
+                <Text size="1"><Link href="/configuration?section=job-roles">Manage roles</Link></Text>
               </label>
               <label style={{ flex: 1 }}>
                 <Text as="div" size="2" weight="medium" mb="1">Day type</Text>

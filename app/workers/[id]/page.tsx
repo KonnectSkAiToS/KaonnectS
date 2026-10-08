@@ -139,7 +139,7 @@ function EditWorkerRoles({ workerId, name, current, onSaved }: { workerId: strin
       <Dialog.Trigger><Button variant="soft">Edit roles</Button></Dialog.Trigger>
       <Dialog.Content maxWidth="460px">
         <Dialog.Title>Roles for {name}</Dialog.Title>
-        <Dialog.Description size="2" color="gray" mb="3">They can be booked for these roles once they hold each role's required documents. <Link href="/settings?tab=roles">Manage roles</Link></Dialog.Description>
+        <Dialog.Description size="2" color="gray" mb="3">They can be booked for these roles once they hold each role's required documents. <Link href="/configuration?section=job-roles">Manage roles</Link></Dialog.Description>
         <ErrorCallout error={error} />
         <MultiSelect noun="role" value={skills} onChange={setSkills} options={options} />
         <Flex gap="3" mt="4" justify="end">

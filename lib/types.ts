@@ -1,6 +1,6 @@
 export type Role = "super_admin" | "coordinator" | "client_admin";
 
-/** A job role name. Roles are configured per agency under Settings → Roles. */
+/** A job role name. Roles are configured per agency under Configuration → Job roles. */
 export type Skill = string;
 
 export type DocType =

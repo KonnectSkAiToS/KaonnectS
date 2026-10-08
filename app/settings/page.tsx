@@ -1,13 +1,12 @@
 "use client";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RolesSettings } from "@/components/RolesSettings";
 import { Badge, Button, Card, Dialog, Flex, Select, Switch, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from "@radix-ui/react-icons";
 import { ApiError, downloadFile, ukDate, ROLE_LABEL, fmtDate, fmtDateTime, useApi, useAuth, useRole, useSend } from "@/lib/client";
 import { ErrorCallout, Load, PageHeader } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
-import type { AuditEntry, Client, NotificationTemplate, RetentionRule, Role, Site, User } from "@/lib/types";
+import type { AuditEntry, Client, Role, Site, User } from "@/lib/types";
 import { MultiSelect } from "@/components/MultiSelect";
 
 type U = User & { clients: string[] };
@@ -19,26 +18,20 @@ export default function SettingsPage() {
   return <Suspense><Settings /></Suspense>;
 }
 
-const TABS = ["users", "roles", "templates", "retention", "audit"];
+const TABS = ["users", "audit"];
 
 function Settings() {
   const params = useSearchParams();
   const tab = TABS.includes(params.get("tab") ?? "") ? params.get("tab")! : "users";
   return (
     <>
-      <PageHeader title="Settings & Audit" subtitle="Portal users, job roles, notification messages, data retention and the audit trail." />
+      <PageHeader title="Settings & Audit" subtitle="Portal users and the audit trail. Business setup lives under Configuration." />
       <Tabs.Root defaultValue={tab}>
         <Tabs.List>
           <Tabs.Trigger value="users">Users</Tabs.Trigger>
-          <Tabs.Trigger value="roles">Job roles</Tabs.Trigger>
-          <Tabs.Trigger value="templates">Notifications</Tabs.Trigger>
-          <Tabs.Trigger value="retention">Data retention</Tabs.Trigger>
           <Tabs.Trigger value="audit">Audit log</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="users"><Users /></Tabs.Content>
-        <Tabs.Content value="roles"><RolesSettings /></Tabs.Content>
-        <Tabs.Content value="templates"><Templates /></Tabs.Content>
-        <Tabs.Content value="retention"><Retention /></Tabs.Content>
         <Tabs.Content value="audit"><Audit /></Tabs.Content>
       </Tabs.Root>
     </>
@@ -171,167 +164,6 @@ function UserDialog({ user, clients, onSaved }: { user?: U; clients: ClientWithS
         </form>
       </Dialog.Content>
     </Dialog.Root>
-  );
-}
-
-// ---------- Notification templates ----------
-
-const EVENT_LABEL: Record<NotificationTemplate["event"], string> = {
-  "shift.matched": "New shift match", "shift.confirmed": "Shift confirmed", "shift.cancelled": "Shift cancelled",
-  "shift.reminder": "Reminder 1 hour before shift", "document.expiring": "Document expiring",
-  "leave.decided": "Leave approved / rejected", "timesheet.approved": "Timesheet approved",
-};
-const LIMIT = { push: 178, sms: 160, email: 5000 } as const;
-
-function Templates() {
-  const send = useSend();
-  const { data, error, reload } = useApi<NotificationTemplate[]>("/templates");
-  const [actionError, setActionError] = useState<ApiError>();
-
-  async function toggle(t: NotificationTemplate, enabled: boolean) {
-    try {
-      setActionError(undefined);
-      await send(`/templates/${t.id}`, "PATCH", { enabled });
-      reload();
-    } catch (e) {
-      setActionError(e as ApiError);
-    }
-  }
-
-  return (
-    <Flex direction="column" gap="3" mt="3">
-      <Text size="2" color="gray">
-        {"Placeholders like {{site}} and {{date}} are filled in when the message is sent. SMS is limited to 160 characters."}
-      </Text>
-      <ErrorCallout error={actionError} />
-      <Load data={data} error={error}>
-        {(rows) => (
-          <Card style={{ overflowX: "auto" }}>
-            <Table.Root size="1">
-              <Table.Header><Table.Row>
-                <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Channel</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Message</Table.ColumnHeaderCell><Table.ColumnHeaderCell>On</Table.ColumnHeaderCell><Table.ColumnHeaderCell />
-              </Table.Row></Table.Header>
-              <Table.Body>
-                {rows.map((t) => (
-                  <Table.Row key={t.id}>
-                    <Table.Cell><Text weight="medium">{EVENT_LABEL[t.event]}</Text></Table.Cell>
-                    <Table.Cell><Badge color={t.channel === "sms" ? "orange" : t.channel === "email" ? "blue" : "gray"}>{t.channel}</Badge></Table.Cell>
-                    <Table.Cell style={{ maxWidth: 480 }}>
-                      {t.subject && <Text as="div" size="1" weight="medium">{t.subject}</Text>}
-                      <Text size="1" color="gray" style={{ whiteSpace: "pre-wrap" }}>{t.body}</Text>
-                    </Table.Cell>
-                    <Table.Cell><Switch checked={t.enabled} onCheckedChange={(v) => toggle(t, v)} aria-label={`Enable ${EVENT_LABEL[t.event]}`} /></Table.Cell>
-                    <Table.Cell><TemplateDialog t={t} onSaved={reload} /></Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
-          </Card>
-        )}
-      </Load>
-    </Flex>
-  );
-}
-
-function TemplateDialog({ t, onSaved }: { t: NotificationTemplate; onSaved: () => void }) {
-  const send = useSend();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<ApiError>();
-  const [f, setF] = useState({ subject: t.subject ?? "", body: t.body });
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await send(`/templates/${t.id}`, "PATCH", t.channel === "email" ? f : { body: f.body });
-      setOpen(false);
-      onSaved();
-    } catch (err) {
-      setError(err as ApiError);
-    }
-  }
-
-  return (
-    <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) setF({ subject: t.subject ?? "", body: t.body }); }}>
-      <Dialog.Trigger><Button size="1" variant="soft">Edit</Button></Dialog.Trigger>
-      <Dialog.Content maxWidth="520px">
-        <Dialog.Title>{EVENT_LABEL[t.event]} · {t.channel}</Dialog.Title>
-        <ErrorCallout error={error} />
-        <form onSubmit={save}>
-          <Flex direction="column" gap="3">
-            {t.channel === "email" && (
-              <label><Text as="div" size="2" weight="medium" mb="1">Subject</Text><TextField.Root value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /></label>
-            )}
-            <label>
-              <Text as="div" size="2" weight="medium" mb="1">Message</Text>
-              <TextArea rows={t.channel === "email" ? 8 : 4} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} />
-              <Text size="1" color={f.body.length > LIMIT[t.channel] ? "red" : "gray"}>{f.body.length} / {LIMIT[t.channel]} characters</Text>
-            </label>
-          </Flex>
-          <Flex gap="3" mt="5" justify="end">
-            <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
-            <Button type="submit" disabled={f.body.length > LIMIT[t.channel]}>Save</Button>
-          </Flex>
-        </form>
-      </Dialog.Content>
-    </Dialog.Root>
-  );
-}
-
-// ---------- Data retention ----------
-
-function Retention() {
-  const send = useSend();
-  const { data, error, reload } = useApi<RetentionRule[]>("/retention");
-  const [edits, setEdits] = useState<Record<string, string>>({});
-  const [actionError, setActionError] = useState<ApiError>();
-
-  async function save(r: RetentionRule) {
-    try {
-      setActionError(undefined);
-      await send(`/retention/${r.id}`, "PATCH", { months: Number(edits[r.id]) });
-      setEdits(({ [r.id]: _, ...rest }) => rest);
-      reload();
-    } catch (e) {
-      setActionError(e as ApiError);
-    }
-  }
-
-  return (
-    <Flex direction="column" gap="3" mt="3">
-      <Text size="2" color="gray">How long each kind of record is kept before it's deleted or anonymised. Set these with your compliance lead and check them against current CQC and HMRC guidance.</Text>
-      <ErrorCallout error={actionError} />
-      <Load data={data} error={error}>
-        {(rows) => (
-          <Card style={{ overflowX: "auto" }}>
-            <Table.Root size="1">
-              <Table.Header><Table.Row>
-                <Table.ColumnHeaderCell>Record type</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Keep for</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Counted from</Table.ColumnHeaderCell><Table.ColumnHeaderCell />
-              </Table.Row></Table.Header>
-              <Table.Body>
-                {rows.map((r) => {
-                  const v = edits[r.id] ?? String(r.months);
-                  return (
-                    <Table.Row key={r.id}>
-                      <Table.Cell><Text weight="medium">{r.category}</Text></Table.Cell>
-                      <Table.Cell>
-                        <Flex align="center" gap="2">
-                          <TextField.Root type="number" min={1} max={240} value={v} style={{ width: 80 }} onChange={(e) => setEdits({ ...edits, [r.id]: e.target.value })} />
-                          <Text size="1" color="gray">months{Number(v) >= 12 && ` (${(Number(v) / 12).toFixed(1).replace(".0", "")} yrs)`}</Text>
-                        </Flex>
-                      </Table.Cell>
-                      <Table.Cell><Text size="2" color="gray">{r.basis}</Text></Table.Cell>
-                      <Table.Cell>{edits[r.id] !== undefined && Number(v) !== r.months && <Button size="1" onClick={() => save(r)}>Save</Button>}</Table.Cell>
-                    </Table.Row>
-                  );
-                })}
-              </Table.Body>
-            </Table.Root>
-          </Card>
-        )}
-      </Load>
-    </Flex>
   );
 }
 

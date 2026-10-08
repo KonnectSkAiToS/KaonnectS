@@ -12,8 +12,8 @@ const SECTOR_LABEL = { care: "Care", hospitality: "Hospitality", any: "Any clien
 const COMMON_DOCS = ["DBS Enhanced", "Manual Handling", "Safeguarding", "Food Hygiene", "First Aid", "Medication Training", "NMC PIN", "Moving & Handling", "Infection Control", "Driving Licence"];
 const MIN_PAY_RATE = 12.21;
 
-/** Settings → Roles: the job roles this agency staffs, what each needs, and what it pays by default. */
-export function RolesSettings() {
+/** Configuration → Workforce → Job roles: the job roles this agency staffs, what each needs, and what it pays by default. */
+export function RolesSettings({ readOnly = false }: { readOnly?: boolean }) {
   const { roles, error, reload } = useRoles();
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
@@ -27,7 +27,7 @@ export function RolesSettings() {
           </TextField.Root>
           <Text as="label" size="2"><Flex gap="2" align="center"><Switch checked={showInactive} onCheckedChange={setShowInactive} /> Show inactive</Flex></Text>
         </Flex>
-        <RoleDialog existing={roles ?? []} onSaved={reload} />
+        {!readOnly && <RoleDialog existing={roles ?? []} onSaved={reload} />}
       </Flex>
       <Text size="2" color="gray">
         Roles appear when posting shifts and adding rate cards. A worker needs every document listed for each of their roles, plus Right to Work and References.
@@ -41,7 +41,7 @@ export function RolesSettings() {
                 <Table.Header><Table.Row>
                   <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Offered for</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Required documents</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Default pay</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>In use</Table.ColumnHeaderCell><Table.ColumnHeaderCell />
+                  <Table.ColumnHeaderCell>In use</Table.ColumnHeaderCell>{!readOnly && <Table.ColumnHeaderCell />}
                 </Table.Row></Table.Header>
                 <Table.Body>
                   {shown.map((r) => (
@@ -54,7 +54,7 @@ export function RolesSettings() {
                       <Table.Cell><Flex gap="1" wrap="wrap">{r.requiredDocs.length ? r.requiredDocs.map((d) => <Badge key={d} color="gray">{d}</Badge>) : <Text size="1" color="gray">Base documents only</Text>}</Flex></Table.Cell>
                       <Table.Cell>{r.defaultPayRate != null ? `${fmtMoney(r.defaultPayRate)}/h` : <Text color="gray">—</Text>}</Table.Cell>
                       <Table.Cell><Text size="1">{r.usage.workers} workers · {r.usage.upcomingShifts} upcoming shifts · {r.usage.rateCards} rates</Text></Table.Cell>
-                      <Table.Cell><RoleDialog role={r} existing={rows} onSaved={reload} /></Table.Cell>
+                      {!readOnly && <Table.Cell><RoleDialog role={r} existing={rows} onSaved={reload} /></Table.Cell>}
                     </Table.Row>
                   ))}
                 </Table.Body>

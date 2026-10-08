@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Avatar, Box, DropdownMenu, Flex, IconButton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import {
   BarChartIcon, CalendarIcon, ChatBubbleIcon, ClockIcon, DashboardIcon, FileTextIcon, GearIcon,
-  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, ExitIcon, PersonIcon, SunIcon,
+  DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, ExitIcon, MixerHorizontalIcon, PersonIcon, SunIcon,
 } from "@radix-ui/react-icons";
 import { ROLE_LABEL, useAuth } from "@/lib/client";
 import { useAppStore } from "@/lib/store";
@@ -26,6 +26,7 @@ const NAV: { href: string; label: string; icon: React.ReactNode; roles: Role[] }
   { href: "/leave", label: "Leave", icon: <SunIcon />, roles: ALL },
   { href: "/messages", label: "Messages", icon: <ChatBubbleIcon />, roles: ["super_admin", "coordinator"] },
   { href: "/invoices", label: "Invoices", icon: <ReaderIcon />, roles: ["super_admin", "client_admin"] },
+  { href: "/configuration", label: "Configuration", icon: <MixerHorizontalIcon />, roles: ["super_admin", "coordinator"] },
   { href: "/settings", label: "Settings & Audit", icon: <GearIcon />, roles: ["super_admin"] },
   { href: "/platform", label: "Platform & Tenants", icon: <LayersIcon />, roles: ["super_admin"] },
 ];
