@@ -4,14 +4,13 @@ import { useState } from "react";
 import { Badge, Button, Callout, Card, Dialog, Flex, Select, Table, Tabs, Text, TextField } from "@radix-ui/themes";
 import { InfoCircledIcon, PlusIcon } from "@radix-ui/react-icons";
 import { SearchSelect } from "@/components/SearchSelect";
+import { useLeaveTypes } from "@/lib/client";
 import { ApiError, fmtDate, useApi, useRole, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
-import { LEAVE_TYPES, type ContractType, type LeaveBalance, type LeaveRequest, type LeaveType, type Worker } from "@/lib/types";
+import type { ContractType, LeaveBalance, LeaveRequest, Worker } from "@/lib/types";
 
 type Row = LeaveRequest & { workerName: string; contractType: ContractType; balance: LeaveBalance; conflicts: number };
 
-const TYPE_COLOR = (t: LeaveType) => LEAVE_TYPES[t].color;
-const GROUPS = ["Common", "Family", "Other"] as const;
 const days = (l: { from: string; to: string }) => Math.round((Date.parse(l.to) - Date.parse(l.from)) / 864e5) + 1;
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -70,6 +69,7 @@ export default function LeavePage() {
 }
 
 function LeaveTable({ rows, canDecide, onDecide }: { rows: Row[]; canDecide: boolean; onDecide: (l: Row, s: "approved" | "rejected") => void }) {
+  const { color } = useLeaveTypes();
   if (!rows.length) return <Empty>No leave requests here.</Empty>;
   return (
     <Card mt="3" style={{ overflowX: "auto" }}>
@@ -83,7 +83,7 @@ function LeaveTable({ rows, canDecide, onDecide }: { rows: Row[]; canDecide: boo
           {rows.map((l) => (
             <Table.Row key={l.id}>
               <Table.Cell><Link href={`/workers/${l.workerId}`}>{l.workerName}</Link><Text as="div" size="1" color="gray">{l.contractType}</Text></Table.Cell>
-              <Table.Cell><Badge color={TYPE_COLOR(l.type)}>{LEAVE_TYPES[l.type].label}</Badge></Table.Cell>
+              <Table.Cell><Badge color={color(l.type) as never}>{l.type}</Badge></Table.Cell>
               <Table.Cell>
                 {fmtDate(`${l.from}T00:00`)}{l.to !== l.from && <> – {fmtDate(`${l.to}T00:00`)}</>}
                 <Text as="div" size="1" color="gray">{days(l)} day{days(l) > 1 && "s"}{l.note && ` · ${l.note}`}</Text>
@@ -113,6 +113,7 @@ function LeaveTable({ rows, canDecide, onDecide }: { rows: Row[]; canDecide: boo
 
 /** Next 28 days, one row per worker with leave in that window. */
 function LeaveCalendar({ rows }: { rows: Row[] }) {
+  const { color: typeColor } = useLeaveTypes();
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const dates = Array.from({ length: 28 }, (_, i) => iso(new Date(start.getTime() + i * 864e5)));
@@ -133,9 +134,9 @@ function LeaveCalendar({ rows }: { rows: Row[] }) {
             <Text size="1" truncate style={{ alignSelf: "center" }}>{name}</Text>
             {dates.map((d) => {
               const l = inWindow.find((r) => r.workerId === id && r.from <= d && r.to >= d);
-              const color = l ? TYPE_COLOR(l.type) : null;
+              const color = l ? typeColor(l.type) : null;
               return (
-                <div key={d} title={l ? `${LEAVE_TYPES[l.type].label} (${l.status})` : undefined} style={{
+                <div key={d} title={l ? `${l.type} (${l.status})` : undefined} style={{
                   height: 22, borderRadius: 3,
                   background: color ? `var(--${color}-${l!.status === "approved" ? 9 : 5})` : "var(--gray-a3)",
                 }} />
@@ -146,7 +147,7 @@ function LeaveCalendar({ rows }: { rows: Row[] }) {
       </div>
       <Flex gap="3" mt="3" wrap="wrap">
         {/* Legend lists only the types that appear, so it stays short. */}
-        {[...new Set(inWindow.map((r) => r.type))].map((t) => <Badge key={t} color={TYPE_COLOR(t)}>{LEAVE_TYPES[t].label}</Badge>)}
+        {[...new Set(inWindow.map((r) => r.type))].map((t) => <Badge key={t} color={typeColor(t) as never}>{t}</Badge>)}
         <Text size="1" color="gray">Solid = approved, light = pending</Text>
       </Flex>
     </Card>
@@ -155,11 +156,12 @@ function LeaveCalendar({ rows }: { rows: Row[] }) {
 
 function RecordLeave({ onSaved }: { onSaved: () => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("dummy:/workers");
+  const { data: workers } = useApi<Worker[]>("/workers");
+  const { active: types } = useLeaveTypes();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const today = iso(new Date());
-  const [f, setF] = useState({ workerId: "", type: "holiday" as LeaveType, from: today, to: today, note: "" });
+  const [f, setF] = useState({ workerId: "", type: "", from: today, to: today, note: "" });
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
   const umbrella = workers?.find((w) => w.id === f.workerId)?.contractType === "Umbrella";
 
@@ -191,22 +193,12 @@ function RecordLeave({ onSaved }: { onSaved: () => void }) {
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Type</Text>
-              <Select.Root value={f.type} onValueChange={(type) => set({ type: type as LeaveType })}>
-                <Select.Trigger style={{ width: "100%" }} />
-                <Select.Content position="popper">
-                  {GROUPS.map((g, i) => (
-                    <Select.Group key={g}>
-                      {i > 0 && <Select.Separator />}
-                      <Select.Label>{g}</Select.Label>
-                      {(Object.entries(LEAVE_TYPES) as [LeaveType, (typeof LEAVE_TYPES)[LeaveType]][]).filter(([, m]) => m.group === g).map(([t, m]) => (
-                        <Select.Item key={t} value={t} disabled={t === "holiday" && umbrella}>
-                          {m.label}{t === "holiday" && umbrella && " (not for umbrella workers)"}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchSelect noun="leave type" placeholder="Choose leave type" value={f.type} onChange={(type) => set({ type })}
+                options={types
+                  // Types that use the holiday balance aren't available to umbrella workers.
+                  .filter((t) => !(umbrella && t.countsAgainstHoliday))
+                  .map((t) => ({ id: t.name, label: t.name, hint: [t.paid ? "paid" : "unpaid", t.countsAgainstHoliday && "uses holiday", !t.blocksBooking && "can still be booked"].filter(Boolean).join(" · ") }))} />
+              {umbrella && <Text size="1" color="gray">Umbrella workers don't accrue holiday, so holiday-balance types are hidden.</Text>}
             </label>
             <Flex gap="3">
               <label style={{ flex: 1 }}>
@@ -225,7 +217,7 @@ function RecordLeave({ onSaved }: { onSaved: () => void }) {
           </Flex>
           <Flex gap="3" mt="5" justify="end">
             <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
-            <Button type="submit" disabled={!f.workerId}>Save</Button>
+            <Button type="submit" disabled={!f.workerId || !f.type}>Save</Button>
           </Flex>
         </form>
       </Dialog.Content>

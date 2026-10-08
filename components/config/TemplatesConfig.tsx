@@ -16,13 +16,13 @@ const LIMIT = { push: 178, sms: 160, email: 5000 } as const;
 /** Configuration → Notifications: message templates per event and channel. */
 export function TemplatesConfig({ readOnly = false }: { readOnly?: boolean }) {
   const send = useSend();
-  const { data, error, reload } = useApi<NotificationTemplate[]>("/templates");
+  const { data, error, reload } = useApi<NotificationTemplate[]>("/config/templates");
   const [actionError, setActionError] = useState<ApiError>();
 
   async function toggle(t: NotificationTemplate, enabled: boolean) {
     try {
       setActionError(undefined);
-      await send(`/templates/${t.id}`, "PATCH", { enabled });
+      await send(`/config/templates/${t.id}`, "PATCH", { enabled });
       reload();
     } catch (e) {
       setActionError(e as ApiError);
@@ -74,7 +74,7 @@ function TemplateDialog({ t, onSaved }: { t: NotificationTemplate; onSaved: () =
   async function save(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await send(`/templates/${t.id}`, "PATCH", t.channel === "email" ? f : { body: f.body });
+      await send(`/config/templates/${t.id}`, "PATCH", t.channel === "email" ? f : { body: f.body });
       setOpen(false);
       onSaved();
     } catch (err) {

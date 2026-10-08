@@ -2,15 +2,13 @@
 import { useState } from "react";
 import { Badge, Box, Button, Card, Dialog, Flex, Select, Switch, Table, Text, TextArea, TextField } from "@radix-ui/themes";
 import { MagnifyingGlassIcon, PlusIcon } from "@radix-ui/react-icons";
-import { ApiError, fmtMoney, useRoles, useSend } from "@/lib/client";
+import Link from "next/link";
+import { ApiError, fmtMoney, useDocumentTypes, useRoles, useSend, useSettings } from "@/lib/client";
 import { ErrorCallout, Load } from "@/components/ui";
 import { MultiSelect } from "@/components/MultiSelect";
 import type { JobRole } from "@/lib/types";
 
 const SECTOR_LABEL = { care: "Care", hospitality: "Hospitality", any: "Any client" } as const;
-// Suggestions for required documents; agencies can add their own names too.
-const COMMON_DOCS = ["DBS Enhanced", "Manual Handling", "Safeguarding", "Food Hygiene", "First Aid", "Medication Training", "NMC PIN", "Moving & Handling", "Infection Control", "Driving Licence"];
-const MIN_PAY_RATE = 12.21;
 
 /** Configuration → Workforce → Job roles: the job roles this agency staffs, what each needs, and what it pays by default. */
 export function RolesSettings({ readOnly = false }: { readOnly?: boolean }) {
@@ -30,7 +28,7 @@ export function RolesSettings({ readOnly = false }: { readOnly?: boolean }) {
         {!readOnly && <RoleDialog existing={roles ?? []} onSaved={reload} />}
       </Flex>
       <Text size="2" color="gray">
-        Roles appear when posting shifts and adding rate cards. A worker needs every document listed for each of their roles, plus Right to Work and References.
+        Roles appear when posting shifts and adding rate cards. A worker needs every document listed for each of their roles, plus the documents every worker needs.
       </Text>
       <Load data={roles} error={error}>
         {(rows) => {
@@ -71,6 +69,8 @@ export function RolesSettings({ readOnly = false }: { readOnly?: boolean }) {
 /** Add (no `role`) or edit a role. Renaming carries through to workers, shifts and rate cards. */
 function RoleDialog({ role, existing, onSaved }: { role?: JobRole; existing: JobRole[]; onSaved: () => void }) {
   const send = useSend();
+  const { active: docTypes } = useDocumentTypes();
+  const minPay = useSettings().get("pay.minPayRate", 12.21);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const init = () => ({
@@ -78,8 +78,8 @@ function RoleDialog({ role, existing, onSaved }: { role?: JobRole; existing: Job
     requiredDocs: role?.requiredDocs ?? [], defaultPayRate: role?.defaultPayRate != null ? String(role.defaultPayRate) : "", active: role?.active ?? true,
   });
   const [f, setF] = useState(init);
-  const [newDoc, setNewDoc] = useState("");
-  const docOptions = [...new Set([...COMMON_DOCS, ...existing.flatMap((r) => r.requiredDocs), ...f.requiredDocs])].sort();
+  // Documents come from Configuration → Document types; ones every worker needs are implied, so not offered.
+  const docOptions = [...new Set([...docTypes.filter((d) => !d.requiredForAll).map((d) => d.name), ...f.requiredDocs])].sort();
   const renamed = role && f.name.trim() && f.name.trim() !== role.name;
   const inUse = role && (role.usage.workers + role.usage.upcomingShifts + role.usage.rateCards) > 0;
 
@@ -97,7 +97,7 @@ function RoleDialog({ role, existing, onSaved }: { role?: JobRole; existing: Job
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) { setF(init()); setNewDoc(""); } }}>
+    <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) setF(init()); }}>
       <Dialog.Trigger>{role ? <Button size="1" variant="soft">Edit</Button> : <Button><PlusIcon /> Add role</Button>}</Dialog.Trigger>
       <Dialog.Content maxWidth="520px">
         <Dialog.Title>{role ? `Edit ${role.name}` : "Add role"}</Dialog.Title>
@@ -116,7 +116,7 @@ function RoleDialog({ role, existing, onSaved }: { role?: JobRole; existing: Job
                 </Select.Root>
               </label>
               <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Default pay (£/h, optional)</Text>
-                <TextField.Root type="number" step="0.01" min={MIN_PAY_RATE} value={f.defaultPayRate} onChange={(e) => setF({ ...f, defaultPayRate: e.target.value })} />
+                <TextField.Root type="number" step="0.01" min={minPay} value={f.defaultPayRate} onChange={(e) => setF({ ...f, defaultPayRate: e.target.value })} />
               </label>
             </Flex>
             <Text size="1" color="gray">Default pay seeds weekday/weekend/night rate cards when a new client of that sector is added.</Text>
@@ -127,12 +127,7 @@ function RoleDialog({ role, existing, onSaved }: { role?: JobRole; existing: Job
               <Text as="div" size="2" weight="medium" mb="1">Required documents</Text>
               <MultiSelect noun="document" height={180} value={f.requiredDocs} onChange={(requiredDocs) => setF({ ...f, requiredDocs })}
                 options={docOptions.map((d) => ({ id: d, label: d }))} allowEmpty />
-              <Flex gap="2" mt="2">
-                <Box flexGrow="1"><TextField.Root size="1" placeholder="Add another document type" value={newDoc} maxLength={80} onChange={(e) => setNewDoc(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (newDoc.trim()) { setF({ ...f, requiredDocs: [...new Set([...f.requiredDocs, newDoc.trim()])] }); setNewDoc(""); } } }} /></Box>
-                <Button type="button" size="1" variant="soft" disabled={!newDoc.trim()}
-                  onClick={() => { setF({ ...f, requiredDocs: [...new Set([...f.requiredDocs, newDoc.trim()])] }); setNewDoc(""); }}>Add</Button>
-              </Flex>
+              <Text size="1" color="gray">Need another? Add it under <Link href="/configuration?section=document-types">Document types</Link>.</Text>
             </div>
             {role && (
               <Text as="label" size="2"><Flex gap="2" align="center"><Switch checked={f.active} onCheckedChange={(active) => setF({ ...f, active })} /> Active</Flex>

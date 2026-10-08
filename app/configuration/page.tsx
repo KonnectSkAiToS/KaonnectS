@@ -8,6 +8,9 @@ import { PageHeader } from "@/components/ui";
 import { RolesSettings } from "@/components/RolesSettings";
 import { TemplatesConfig } from "@/components/config/TemplatesConfig";
 import { RetentionConfig } from "@/components/config/RetentionConfig";
+import { SettingsForm } from "@/components/config/SettingsForm";
+import { DocumentTypesConfig } from "@/components/config/DocumentTypesConfig";
+import { LeaveTypesConfig } from "@/components/config/LeaveTypesConfig";
 
 interface Section {
   id: string;
@@ -22,12 +25,56 @@ interface Section {
  * Every configurable part of the agency's setup, grouped by the module it affects.
  * Add a section here and it appears in the sub-menu and the search.
  */
+const settings = (module: string) => (ro: boolean) => <SettingsForm module={module} readOnly={ro} />;
+
 const SECTIONS: Section[] = [
   {
     id: "job-roles", module: "Workforce", label: "Job roles",
     description: "Roles you staff, the documents each needs, default pay, and which clients they're offered for.",
     keywords: "skills carer chef nurse documents dbs pay",
     render: (ro) => <RolesSettings readOnly={ro} />,
+  },
+  {
+    id: "document-types", module: "Workforce", label: "Document types",
+    description: "Compliance documents you track: which every worker needs, and which expire.",
+    keywords: "dbs right to work references training certificate compliance expiry",
+    render: (ro) => <DocumentTypesConfig readOnly={ro} />,
+  },
+  {
+    id: "booking-rules", module: "Shifts & booking", label: "Booking rules",
+    description: "Rest between shifts, the weekly hours cap and the longest shift. Legal limits can be tightened, never loosened.",
+    keywords: "rest wtr working time regulations 48 hours 11 hours shift length",
+    render: settings("Booking rules"),
+  },
+  {
+    id: "rates", module: "Shifts & booking", label: "Rates & pay",
+    description: "When the night rate starts, uplifts and margin for new rate cards, and the minimum pay rate.",
+    keywords: "night weekend uplift margin bill minimum wage national living wage",
+    render: settings("Rates & pay"),
+  },
+  {
+    id: "attendance", module: "Attendance", label: "Check-in rules",
+    description: "Default geofence for new sites and when a check-in counts as late.",
+    keywords: "geofence radius late gps check in reliability",
+    render: settings("Attendance"),
+  },
+  {
+    id: "compliance", module: "Compliance", label: "Expiry & reminders",
+    description: "When expiring documents are flagged and how often workers are reminded.",
+    keywords: "expiry warning reminder days documents",
+    render: settings("Compliance"),
+  },
+  {
+    id: "leave-types", module: "Leave", label: "Leave types",
+    description: "Kinds of leave, whether they're paid, use the holiday balance or block booking.",
+    keywords: "holiday sick maternity paternity training unpaid absence",
+    render: (ro) => <LeaveTypesConfig readOnly={ro} />,
+  },
+  {
+    id: "holiday", module: "Leave", label: "Holiday accrual",
+    description: "How holiday is earned and how many hours a day of leave uses.",
+    keywords: "accrual 12.07 statutory holiday balance hours",
+    render: settings("Leave"),
   },
   {
     id: "notifications", module: "Notifications", label: "Message templates",

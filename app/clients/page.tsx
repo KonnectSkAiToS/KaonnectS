@@ -2,15 +2,15 @@
 import { useState } from "react";
 import { Badge, Button, Card, Checkbox, Dialog, Flex, Heading, Select, Table, Text, TextField } from "@radix-ui/themes";
 import { PlusIcon } from "@radix-ui/react-icons";
-import { ApiError, useApi, useRole, useSend } from "@/lib/client";
+import { ApiError, useApi, useDocumentTypes, useRole, useSend, useSettings } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader } from "@/components/ui";
 import type { Client, DocType, Role, Site } from "@/lib/types";
 
-// Right to Work and References are always required, so only the site-specific ones are choosable.
-const SITE_DOCS: DocType[] = ["DBS Enhanced", "Manual Handling", "Safeguarding", "Food Hygiene"];
 
 export default function ClientsPage() {
   const { role } = useRole();
+  const { active: docTypes } = useDocumentTypes();
+  const everyone = docTypes.filter((d) => d.requiredForAll).map((d) => d.name);
   const { data, error, reload } = useApi<(Client & { sites: Site[] })[]>("/clients");
   return (
     <>
@@ -49,7 +49,7 @@ export default function ClientsPage() {
                             <Table.Cell>{s.radiusM} m{role === "super_admin" && <Text as="div" size="1" color="gray">PIN {s.sitePin}</Text>}</Table.Cell>
                             <Table.Cell>
                               <Flex gap="1" wrap="wrap">
-                                <Badge color="gray" variant="outline">Right to Work</Badge><Badge color="gray" variant="outline">References</Badge>
+                                {everyone.map((d) => <Badge key={d} color="gray" variant="outline">{d}</Badge>)}
                                 {s.requiredDocs.map((d) => <Badge key={d} color="gray">{d}</Badge>)}
                               </Flex>
                             </Table.Cell>
@@ -131,7 +131,8 @@ function AddSite({ client, onSaved }: { client: Client; onSaved: () => void }) {
   const send = useSend();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
-  const empty = { name: "", address: "", lat: "", lng: "", radiusM: "150" };
+  const defaultRadius = useSettings().get("attendance.defaultGeofenceM", 150);
+  const empty = { name: "", address: "", lat: "", lng: "", radiusM: String(defaultRadius) };
   const [f, setF] = useState(empty);
 
   async function submit(e: React.FormEvent) {
@@ -178,6 +179,9 @@ function AddSite({ client, onSaved }: { client: Client; onSaved: () => void }) {
 /** Super Admin edits everything; Client Admin edits only the required documents for their sites. */
 function EditSite({ site, role, onSaved }: { site: Site; role: Role; onSaved: () => void }) {
   const send = useSend();
+  const { active: docTypes } = useDocumentTypes();
+  // Documents every worker needs are implied; only site-specific ones are choosable.
+  const siteDocs = [...new Set([...docTypes.filter((d) => !d.requiredForAll).map((d) => d.name), ...site.requiredDocs])];
   const [open, setOpen] = useState(false);
   const init = () => ({ radius: String(site.radiusM), pin: site.sitePin, docs: site.requiredDocs });
   const [f, setF] = useState(init);
@@ -194,7 +198,7 @@ function EditSite({ site, role, onSaved }: { site: Site; role: Role; onSaved: ()
       setError(err as ApiError);
     }
   }
-  const toggle = (d: DocType, on: boolean) => setF({ ...f, docs: on ? [...f.docs, d] : f.docs.filter((x) => x !== d) });
+  const toggle = (d: string, on: boolean) => setF({ ...f, docs: on ? [...f.docs, d] : f.docs.filter((x) => x !== d) });
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) setF(init()); }}>
@@ -212,9 +216,9 @@ function EditSite({ site, role, onSaved }: { site: Site; role: Role; onSaved: ()
             </>}
             <div>
               <Text as="div" size="2" weight="medium" mb="1">Required documents</Text>
-              <Text as="p" size="1" color="gray" mb="2">Right to Work and References are always required. Workers missing any ticked document can't be booked here.</Text>
+              <Text as="p" size="1" color="gray" mb="2">Documents every worker needs are always required. Workers missing any ticked document can't be booked here.</Text>
               <Flex direction="column" gap="1">
-                {SITE_DOCS.map((d) => (
+                {siteDocs.map((d) => (
                   <Text as="label" size="2" key={d}>
                     <Flex gap="2" align="center"><Checkbox checked={f.docs.includes(d)} onCheckedChange={(v) => toggle(d, v === true)} /> {d}</Flex>
                   </Text>

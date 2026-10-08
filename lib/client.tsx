@@ -29,6 +29,9 @@ const MIGRATED = [
   /^\/ratecards(?:[/?]|$)/,
   /^\/payroll(?:[/?]|$)/,
   /^\/roles(?:[/?]|$)/,
+  /^\/config\//,
+  /^\/documents(?:[/?]|$)/,
+  /^\/leave(?:[/?]|$)/,
 ];
 
 /**
@@ -268,4 +271,37 @@ export function useRoles() {
   const forSector = (sector?: string) =>
     (data ?? []).filter((r) => r.active && (!sector || r.sector === "any" || r.sector === sector)).map((r) => r.name);
   return { roles: data, error, reload, forSector };
+}
+
+// ---------- Configuration ----------
+
+export interface SettingDef {
+  key: string; module: string; label: string; help: string; type: "number" | "time";
+  default: number | string; min?: number; max?: number; step?: number; unit?: string; value: number | string;
+}
+export interface DocumentTypeConfig {
+  id: string; name: string; description: string | null; hasExpiry: boolean; requiredForAll: boolean; active: boolean;
+  usage: { roles: number; sites: number; documents: number };
+}
+export interface LeaveTypeConfig {
+  id: string; name: string; color: string; paid: boolean; countsAgainstHoliday: boolean; blocksBooking: boolean;
+  active: boolean; sortOrder: number; usage: { requests: number };
+}
+
+/** Agency settings (Configuration). `get(key)` falls back to the given default while loading. */
+export function useSettings() {
+  const { data, error, reload } = useApi<SettingDef[]>("/config/settings");
+  const get = <T extends number | string>(key: string, fallback: T): T => (data?.find((s) => s.key === key)?.value as T) ?? fallback;
+  return { settings: data, error, reload, get };
+}
+
+export function useDocumentTypes() {
+  const { data, error, reload } = useApi<DocumentTypeConfig[]>("/config/document-types");
+  return { docTypes: data, error, reload, active: (data ?? []).filter((d) => d.active) };
+}
+
+export function useLeaveTypes() {
+  const { data, error, reload } = useApi<LeaveTypeConfig[]>("/config/leave-types");
+  const byName = (name: string) => data?.find((t) => t.name === name);
+  return { leaveTypes: data, error, reload, active: (data ?? []).filter((t) => t.active), byName, color: (name: string) => byName(name)?.color ?? "gray" };
 }

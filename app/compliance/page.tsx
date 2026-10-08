@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge, Button, Callout, Card, Checkbox, DataList, Dialog, Flex, Select, Table, Tabs, Text, TextField } from "@radix-ui/themes";
 import { EyeOpenIcon, FileTextIcon, InfoCircledIcon, PaperPlaneIcon, UploadIcon } from "@radix-ui/react-icons";
 import { SearchSelect } from "@/components/SearchSelect";
-import { ApiError, fmtDate, fmtDateTime, useApi, useSend } from "@/lib/client";
+import { ApiError, fmtDate, fmtDateTime, useApi, useDocumentTypes, useSend } from "@/lib/client";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
 import type { DocType, Worker, WorkerDocument } from "@/lib/types";
 
@@ -15,7 +15,6 @@ const BUCKETS = [
   { key: "14", label: "≤ 14 days", test: (d: number) => d > 7 && d <= 14, color: "amber" },
   { key: "30", label: "≤ 30 days", test: (d: number) => d > 14 && d <= 30, color: "yellow" },
 ] as const;
-const DOC_TYPES: DocType[] = ["Right to Work", "References", "DBS Enhanced", "Manual Handling", "Safeguarding", "Food Hygiene"];
 const day = (s: string) => fmtDate(`${s}T00:00`);
 
 export default function CompliancePage() {
@@ -175,11 +174,13 @@ function ViewDocument({ doc }: { doc: Doc }) {
 
 function UploadDocument({ onSaved }: { onSaved: () => void }) {
   const send = useSend();
-  const { data: workers } = useApi<Worker[]>("dummy:/workers");
+  const { data: workers } = useApi<Worker[]>("/workers");
+  const { active: docTypes } = useDocumentTypes();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
-  const empty = { workerId: "", type: "" as DocType | "", expiresOn: "", file: null as File | null };
+  const empty = { workerId: "", type: "" as DocType, expiresOn: "", file: null as File | null };
   const [f, setF] = useState(empty);
+  const needsExpiry = docTypes.find((d) => d.name === f.type)?.hasExpiry ?? false;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -213,12 +214,12 @@ function UploadDocument({ onSaved }: { onSaved: () => void }) {
             </label>
             <label>
               <Text as="div" size="2" weight="medium" mb="1">Document type</Text>
-              <Select.Root value={f.type} onValueChange={(type) => setF({ ...f, type: type as DocType })}>
+              <Select.Root value={f.type} onValueChange={(type) => setF({ ...f, type, expiresOn: "" })}>
                 <Select.Trigger placeholder="Choose type" style={{ width: "100%" }} />
-                <Select.Content>{DOC_TYPES.map((t) => <Select.Item key={t} value={t}>{t}</Select.Item>)}</Select.Content>
+                <Select.Content>{docTypes.map((t) => <Select.Item key={t.id} value={t.name}>{t.name}{t.hasExpiry ? "" : " (no expiry)"}</Select.Item>)}</Select.Content>
               </Select.Root>
             </label>
-            {f.type && f.type !== "References" && (
+            {needsExpiry && (
               <label>
                 <Text as="div" size="2" weight="medium" mb="1">Expiry date</Text>
                 <TextField.Root type="date" value={f.expiresOn} onChange={(e) => setF({ ...f, expiresOn: e.target.value })} required />

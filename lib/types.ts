@@ -3,13 +3,8 @@ export type Role = "super_admin" | "coordinator" | "client_admin";
 /** A job role name. Roles are configured per agency under Configuration → Job roles. */
 export type Skill = string;
 
-export type DocType =
-  | "Right to Work"
-  | "References"
-  | "DBS Enhanced"
-  | "Manual Handling"
-  | "Safeguarding"
-  | "Food Hygiene";
+/** A document type name. Types are configured per agency under Configuration → Document types. */
+export type DocType = string;
 
 export type ContractType = "PAYE" | "Zero-hours" | "Umbrella";
 
@@ -173,7 +168,9 @@ export const LEAVE_TYPES = {
   jury_service: { label: "Jury service / public duties", group: "Other", color: "indigo" },
   unpaid: { label: "Unpaid leave", group: "Other", color: "gold" },
 } as const;
-export type LeaveType = keyof typeof LEAVE_TYPES;
+/** A leave type name. Types are configured per agency under Configuration → Leave types.
+ * LEAVE_TYPES above is only the starting set used to seed demo data. */
+export type LeaveType = string;
 
 export interface LeaveRequest {
   id: string;

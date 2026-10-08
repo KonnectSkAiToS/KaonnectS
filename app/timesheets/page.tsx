@@ -1,10 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Badge, Box, Button, Card, Dialog, Flex, Grid, Select, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
-import { MIN_PAY_RATE } from "@/lib/rules";
 import { DownloadIcon, PlusIcon } from "@radix-ui/react-icons";
 import { SearchSelect } from "@/components/SearchSelect";
-import { ApiError, downloadFile, ukDate, fmtDate, fmtHours, fmtMoney, useApi, useRole, useRoles, useSend } from "@/lib/client";
+import { ApiError, downloadFile, ukDate, fmtDate, fmtHours, fmtMoney, useApi, useRole, useRoles, useSend, useSettings } from "@/lib/client";
 import Link from "next/link";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
@@ -240,13 +239,14 @@ function RateCards() {
 }
 
 const DAY_TYPES = { weekday: "Weekday", weekend: "Weekend", night: "Night (starts 20:00 or later)" } as const;
-const STANDARD_MARGIN = 1.32;
 
 /** Add a rate for a client / role / day type with no rate yet (e.g. a care client that now needs a Kitchen Porter). */
 function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; onSaved: () => void }) {
   const send = useSend();
   const { data: clients } = useApi<Client[]>("/clients");
   const { forSector } = useRoles();
+  const { get } = useSettings();
+  const minPay = get("pay.minPayRate", 12.21), marginPct = get("rates.defaultMarginPct", 32);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const blank = () => ({ clientId: defaultClientId, role: "", dayType: "weekday" as keyof typeof DAY_TYPES, payRate: "", billRate: "" });
@@ -295,8 +295,8 @@ function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; on
             </Flex>
             <Flex gap="3">
               <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Pay rate (£/h)</Text>
-                <TextField.Root type="number" step="0.01" min={MIN_PAY_RATE} value={f.payRate}
-                  onChange={(e) => setF({ ...f, payRate: e.target.value, billRate: f.billRate || !e.target.value ? f.billRate : (Number(e.target.value) * STANDARD_MARGIN).toFixed(2) })} />
+                <TextField.Root type="number" step="0.01" min={minPay} value={f.payRate}
+                  onChange={(e) => setF({ ...f, payRate: e.target.value, billRate: f.billRate || !e.target.value ? f.billRate : (Number(e.target.value) * (1 + marginPct / 100)).toFixed(2) })} />
               </label>
               <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Bill rate (£/h)</Text>
                 <TextField.Root type="number" step="0.01" value={f.billRate} onChange={(e) => setF({ ...f, billRate: e.target.value })} />
@@ -305,7 +305,7 @@ function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; on
             {pay > 0 && bill > 0 && (
               <Text size="2" color={bill < pay ? "red" : undefined}>Margin {fmtMoney(bill - pay)}/h ({Math.round(((bill - pay) / bill) * 100)}%)</Text>
             )}
-            <Text size="1" color="gray">Minimum pay rate £{MIN_PAY_RATE.toFixed(2)}/h. Bill rate is pre-filled at the standard 32% uplift.</Text>
+            <Text size="1" color="gray">Minimum pay rate £{minPay.toFixed(2)}/h. Bill rate is pre-filled with the {marginPct}% default uplift (Configuration → Rates & pay).</Text>
           </Flex>
           <Flex gap="3" mt="4" justify="end">
             <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
@@ -319,6 +319,7 @@ function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; on
 
 function EditRate({ rate, onSaved }: { rate: Rate; onSaved: () => void }) {
   const send = useSend();
+  const minPay = useSettings().get("pay.minPayRate", 12.21);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const [f, setF] = useState({ payRate: String(rate.payRate), billRate: String(rate.billRate) });
@@ -345,7 +346,7 @@ function EditRate({ rate, onSaved }: { rate: Rate; onSaved: () => void }) {
         <form onSubmit={save}>
           <Flex gap="3">
             <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Pay rate (£/h)</Text>
-              <TextField.Root type="number" step="0.01" min={MIN_PAY_RATE} value={f.payRate} onChange={(e) => setF({ ...f, payRate: e.target.value })} />
+              <TextField.Root type="number" step="0.01" min={minPay} value={f.payRate} onChange={(e) => setF({ ...f, payRate: e.target.value })} />
             </label>
             <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Bill rate (£/h)</Text>
               <TextField.Root type="number" step="0.01" value={f.billRate} onChange={(e) => setF({ ...f, billRate: e.target.value })} />
@@ -356,7 +357,7 @@ function EditRate({ rate, onSaved }: { rate: Rate; onSaved: () => void }) {
               Margin {fmtMoney(bill - pay)}/h ({bill ? Math.round(((bill - pay) / bill) * 100) : 0}%)
             </Text>
           )}
-          <Text as="p" size="1" color="gray">Minimum pay rate £{MIN_PAY_RATE.toFixed(2)}/h (National Living Wage).</Text>
+          <Text as="p" size="1" color="gray">Minimum pay rate £{minPay.toFixed(2)}/h (Configuration → Rates & pay).</Text>
           <Flex gap="3" mt="4" justify="end">
             <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
             <Button type="submit">Save</Button>

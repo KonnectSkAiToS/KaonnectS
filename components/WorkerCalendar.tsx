@@ -3,12 +3,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge, Box, Button, Card, Flex, Grid, Heading, Text } from "@radix-ui/themes";
 import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
-import { addDays, fmtHours, fmtTime, ukDate, useApi } from "@/lib/client";
+import { addDays, fmtHours, fmtTime, ukDate, useApi, useLeaveTypes } from "@/lib/client";
 import { Load } from "@/components/ui";
-import { LEAVE_TYPES, type LeaveType } from "@/lib/types";
 
 interface CalShift { id: string; role: string; start: string; end: string; status: string; siteName: string; hours: number }
-interface CalLeave { id: string; type: LeaveType; from: string; to: string; status: "pending" | "approved"; note: string | null }
+interface CalLeave { id: string; type: string; from: string; to: string; status: "pending" | "approved"; note: string | null }
 interface Calendar { month: string; shifts: CalShift[]; leave: CalLeave[] }
 
 // How a shift reads on the calendar.
@@ -30,6 +29,7 @@ export function WorkerCalendar({ workerId }: { workerId: string }) {
   const today = ukDate(new Date());
   const [month, setMonth] = useState(today.slice(0, 7));
   const { data, error } = useApi<Calendar>(`/workers/${workerId}/calendar?month=${month}`);
+  const { color: leaveColor } = useLeaveTypes();
 
   // Grid: Monday-first weeks covering the whole month.
   const first = `${month}-01`;
@@ -75,11 +75,11 @@ export function WorkerCalendar({ workerId }: { workerId: string }) {
                     <div key={day} className={`wc-day${inMonth ? "" : " wc-out"}${day === today ? " wc-today" : ""}`}>
                       <Text size="1" weight={day === today ? "bold" : "regular"} color={inMonth ? undefined : "gray"}>{+day.slice(8)}</Text>
                       {leaveOn(day).map((l) => {
-                        const meta = LEAVE_TYPES[l.type];
+                        const c = leaveColor(l.type);
                         return (
-                          <div key={l.id} className="wc-leave" title={`${meta?.label ?? l.type} (${l.status})${l.note ? ` · ${l.note}` : ""}`}
-                            style={{ background: `var(--${meta?.color ?? "gray"}-${l.status === "approved" ? 9 : 4})`, color: l.status === "approved" ? "white" : `var(--${meta?.color ?? "gray"}-11)` }}>
-                            {meta?.label ?? l.type}{l.status === "pending" && " ?"}
+                          <div key={l.id} className="wc-leave" title={`${l.type} (${l.status})${l.note ? ` · ${l.note}` : ""}`}
+                            style={{ background: `var(--${c}-${l.status === "approved" ? 9 : 4})`, color: l.status === "approved" ? "white" : `var(--${c}-11)` }}>
+                            {l.type}{l.status === "pending" && " ?"}
                           </div>
                         );
                       })}
@@ -99,7 +99,7 @@ export function WorkerCalendar({ workerId }: { workerId: string }) {
 
               <Flex gap="2" mt="3" wrap="wrap" align="center">
                 <Badge color="green">Worked</Badge><Badge color="blue">Scheduled</Badge><Badge color="red">No-show</Badge>
-                {[...new Set(leave.map((l) => l.type))].map((t) => <Badge key={t} color={LEAVE_TYPES[t]?.color ?? "gray"} variant="solid">{LEAVE_TYPES[t]?.label ?? t}</Badge>)}
+                {[...new Set(leave.map((l) => l.type))].map((t) => <Badge key={t} color={leaveColor(t) as never} variant="solid">{t}</Badge>)}
                 <Text size="1" color="gray">Solid leave = approved, light = pending. Times are UK time.</Text>
               </Flex>
             </>

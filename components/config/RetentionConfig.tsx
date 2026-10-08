@@ -9,14 +9,14 @@ import type { RetentionRule } from "@/lib/types";
 /** Configuration → Data: how long each kind of record is kept. */
 export function RetentionConfig({ readOnly = false }: { readOnly?: boolean }) {
   const send = useSend();
-  const { data, error, reload } = useApi<RetentionRule[]>("/retention");
+  const { data, error, reload } = useApi<RetentionRule[]>("/config/retention");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<ApiError>();
 
   async function save(r: RetentionRule) {
     try {
       setActionError(undefined);
-      await send(`/retention/${r.id}`, "PATCH", { months: Number(edits[r.id]) });
+      await send(`/config/retention/${r.id}`, "PATCH", { months: Number(edits[r.id]) });
       setEdits(({ [r.id]: _, ...rest }) => rest);
       reload();
     } catch (e) {
