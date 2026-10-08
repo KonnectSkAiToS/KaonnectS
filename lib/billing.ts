@@ -48,6 +48,7 @@ export function createInvoice(db: DB, clientId: string, from: string, to: string
   const inv: Invoice = {
     id: `inv${n}`, number: `INV-${String(1000 + n)}`, clientId, periodFrom: from, periodTo: to,
     createdAt: new Date().toISOString(), status: "draft", lines, ...totals(lines),
+    vatPct: VAT_RATE * 100, paymentTermsDays: PAYMENT_TERMS_DAYS,
   };
   for (const l of lines) db.timesheets.find((t) => t.id === l.timesheetId)!.invoiceId = inv.id;
   db.invoices.push(inv);

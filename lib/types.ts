@@ -255,8 +255,10 @@ export interface Invoice {
   status: InvoiceStatus;
   lines: InvoiceLine[];
   subtotal: number;
+  vatPct: number; // snapshot of the agency setting when the draft was made
   vat: number;
   total: number;
+  paymentTermsDays: number;
 }
 
 export type Plan = "starter" | "growth" | "enterprise";

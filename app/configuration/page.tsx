@@ -77,6 +77,12 @@ const SECTIONS: Section[] = [
     render: settings("Leave"),
   },
   {
+    id: "invoicing", module: "Invoicing", label: "VAT & payment terms",
+    description: "The VAT rate added to new invoices and how many days clients have to pay.",
+    keywords: "vat tax invoice payment terms due days billing",
+    render: settings("Invoicing"),
+  },
+  {
     id: "notifications", module: "Notifications", label: "Message templates",
     description: "Push, SMS and email messages sent to workers, with placeholders like {{site}} and {{date}}.",
     keywords: "sms email push reminder text message",

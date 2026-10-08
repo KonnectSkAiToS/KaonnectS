@@ -99,12 +99,12 @@ function InvoiceTable({ rows }: { rows: Row[] }) {
 
 function GenerateInvoice({ onCreated }: { onCreated: (id: string) => void }) {
   const send = useSend();
-  const { data: clients } = useApi<Client[]>("dummy:/clients");
+  const { data: clients } = useApi<Client[]>("/clients");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
   const now = new Date();
   const [f, setF] = useState({ clientId: "", from: localIso(new Date(now.getTime() - 14 * 864e5)), to: localIso(now) });
-  const [preview, setPreview] = useState<{ lines: InvoiceLine[]; subtotal: number; vat: number; total: number }>();
+  const [preview, setPreview] = useState<{ lines: InvoiceLine[]; subtotal: number; vatPct: number; vat: number; total: number }>();
   const set = (p: Partial<typeof f>) => { setF((x) => ({ ...x, ...p })); setPreview(undefined); };
 
   async function run(create: boolean) {
@@ -124,7 +124,7 @@ function GenerateInvoice({ onCreated }: { onCreated: (id: string) => void }) {
       <Dialog.Trigger><Button><PlusIcon /> Generate invoice</Button></Dialog.Trigger>
       <Dialog.Content maxWidth="520px">
         <Dialog.Title>Generate invoice</Dialog.Title>
-        <Dialog.Description size="2" color="gray" mb="4">Bills approved timesheets in the period that haven't been invoiced yet, at the client's bill rate plus 20% VAT. It's saved as a draft for you to check before issuing.</Dialog.Description>
+        <Dialog.Description size="2" color="gray" mb="4">Bills approved timesheets in the period that haven't been invoiced yet, at the client's bill rate plus VAT (set in Configuration → Invoicing). It's saved as a draft for you to check before issuing.</Dialog.Description>
         <ErrorCallout error={error} />
         <Flex direction="column" gap="3">
           <SearchSelect noun="client" placeholder="Choose client" value={f.clientId} onChange={(clientId) => set({ clientId })}
@@ -138,7 +138,7 @@ function GenerateInvoice({ onCreated }: { onCreated: (id: string) => void }) {
               {preview.lines.length === 0 ? <Text size="2" color="gray">Nothing to bill in this period.</Text> : (
                 <Flex direction="column" gap="1">
                   <Text size="2">{preview.lines.length} timesheet lines · {preview.lines.reduce((a, l) => a + l.hours, 0).toFixed(1)} hours</Text>
-                  <Text size="2">Subtotal {fmtMoney(preview.subtotal)} · VAT {fmtMoney(preview.vat)}</Text>
+                  <Text size="2">Subtotal {fmtMoney(preview.subtotal)} · VAT ({preview.vatPct}%) {fmtMoney(preview.vat)}</Text>
                   <Text size="3" weight="bold">Total {fmtMoney(preview.total)}</Text>
                 </Flex>
               )}

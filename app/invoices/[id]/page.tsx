@@ -9,7 +9,11 @@ import { ErrorCallout, InvoiceBadge, Load } from "@/components/ui";
 import { ReloadButton } from "@/components/ReloadButton";
 import type { Client, Invoice, Tenant } from "@/lib/types";
 
-interface Detail { invoice: Invoice & { overdue: boolean }; client: Client; agency: Tenant }
+interface Detail {
+  invoice: Invoice & { overdue: boolean };
+  client: Pick<Client, "id" | "name" | "contact" | "email">;
+  agency: Pick<Tenant, "name" | "domain" | "brandColor">;
+}
 const dayOnly = (s: string) => fmtDate(`${s}T00:00`);
 
 export default function InvoicePage() {
@@ -95,10 +99,10 @@ export default function InvoicePage() {
             </Box>
             <Flex direction="column" align="end" gap="1" mt="4">
               <Text size="2">Subtotal: {fmtMoney(inv.subtotal)}</Text>
-              <Text size="2">VAT (20%): {fmtMoney(inv.vat)}</Text>
+              <Text size="2">VAT ({inv.vatPct}%): {fmtMoney(inv.vat)}</Text>
               <Text size="4" weight="bold">Total: {fmtMoney(inv.total)}</Text>
             </Flex>
-            <Text as="p" size="1" color="gray" mt="5">Payment terms: 14 days from issue. Please quote {inv.number} with your payment.</Text>
+            <Text as="p" size="1" color="gray" mt="5">Payment terms: {inv.paymentTermsDays} days from issue. Please quote {inv.number} with your payment.</Text>
           </Card>
         )}
       </Load>
