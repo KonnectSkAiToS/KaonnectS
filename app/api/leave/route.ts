@@ -1,7 +1,7 @@
 import { audit, db } from "@/lib/data";
 import { leaveBalance, leaveConflicts } from "@/lib/rules";
 import { body, ctx, fail, forbidden, ok } from "@/lib/server";
-import type { LeaveRequest, LeaveType } from "@/lib/types";
+import { LEAVE_TYPES, type LeaveRequest, type LeaveType } from "@/lib/types";
 
 export function GET(req: Request) {
   const c = ctx(req);
@@ -27,7 +27,7 @@ export function GET(req: Request) {
   );
 }
 
-const TYPES: LeaveType[] = ["holiday", "unavailable", "sick"];
+const TYPES = Object.keys(LEAVE_TYPES) as LeaveType[];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Agency records leave on a worker's behalf (workers normally request it in the mobile app). */

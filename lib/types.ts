@@ -163,7 +163,23 @@ export type ComplianceStatus = "compliant" | "expiring" | "pending" | "blocked";
 
 // ---- Phase 2 ----
 
-export type LeaveType = "holiday" | "unavailable" | "sick";
+export const LEAVE_TYPES = {
+  holiday: { label: "Holiday", group: "Common", color: "green" },
+  sick: { label: "Sick", group: "Common", color: "orange" },
+  unavailable: { label: "Unavailable", group: "Common", color: "gray" },
+  maternity: { label: "Maternity", group: "Family", color: "pink" },
+  paternity: { label: "Paternity", group: "Family", color: "blue" },
+  shared_parental: { label: "Shared parental", group: "Family", color: "violet" },
+  adoption: { label: "Adoption", group: "Family", color: "purple" },
+  parental: { label: "Parental (unpaid)", group: "Family", color: "iris" },
+  dependants: { label: "Time off for dependants", group: "Family", color: "cyan" },
+  compassionate: { label: "Compassionate / bereavement", group: "Other", color: "brown" },
+  medical: { label: "Medical appointment", group: "Other", color: "red" },
+  training: { label: "Training", group: "Other", color: "teal" },
+  jury_service: { label: "Jury service / public duties", group: "Other", color: "indigo" },
+  unpaid: { label: "Unpaid leave", group: "Other", color: "gold" },
+} as const;
+export type LeaveType = keyof typeof LEAVE_TYPES;
 
 export interface LeaveRequest {
   id: string;

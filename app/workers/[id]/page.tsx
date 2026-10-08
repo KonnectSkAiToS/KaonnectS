@@ -6,7 +6,7 @@ import { ArrowLeftIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { fmtDate, fmtHours, fmtTime, useApi } from "@/lib/client";
 import { ComplianceBadge, Empty, Load, PageHeader, ShiftBadge, StatusBadge } from "@/components/ui";
 import { WTR_MAX_HOURS } from "@/lib/rules";
-import type { ComplianceStatus, DocType, LeaveBalance, LeaveRequest, ShiftView, Worker, WorkerDocument } from "@/lib/types";
+import { LEAVE_TYPES, type ComplianceStatus, type DocType, type LeaveBalance, type LeaveRequest, type LeaveType, type ShiftView, type Worker, type WorkerDocument } from "@/lib/types";
 
 interface Detail {
   worker: Worker; compliance: ComplianceStatus; missing: DocType[]; weekHours: number; documents: WorkerDocument[]; shifts: ShiftView[];
@@ -52,7 +52,7 @@ export default function WorkerPage() {
                   : <Text size="2" color="gray">Umbrella contract: no statutory holiday accrual</Text>}
                 {leave.map((l) => (
                   <Text as="div" size="1" key={l.id} mt="1">
-                    <Badge color={l.status === "approved" ? "green" : "amber"}>{l.type} · {l.status}</Badge> {fmtDate(`${l.from}T00:00`)}{l.to !== l.from && ` – ${fmtDate(`${l.to}T00:00`)}`}
+                    <Badge color={l.status === "approved" ? "green" : "amber"}>{LEAVE_TYPES[l.type as LeaveType]?.label ?? l.type} · {l.status}</Badge> {fmtDate(`${l.from}T00:00`)}{l.to !== l.from && ` – ${fmtDate(`${l.to}T00:00`)}`}
                   </Text>
                 ))}
               </Card>
