@@ -3,10 +3,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge, Card, Flex, Select, Table, Text, TextField } from "@radix-ui/themes";
 import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
-import { fmtHours, useApi } from "@/lib/client";
+import { fmtHours, useApi, useSettings } from "@/lib/client";
 import { ComplianceBadge, Empty, Load, PageHeader } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
-import { WTR_MAX_HOURS } from "@/lib/rules";
 import type { ComplianceStatus, Worker } from "@/lib/types";
 
 type W = Worker & { compliance: ComplianceStatus; weekHours: number };
@@ -53,6 +52,7 @@ export default function WorkersPage() {
 const COMPLIANCE_ORDER = { blocked: 0, pending: 1, expiring: 2, compliant: 3 };
 
 function WorkersTable({ rows }: { rows: W[] }) {
+  const maxWeekly = useSettings().get("booking.maxWeeklyHours", 48); // Configuration → Booking rules
   const router = useRouter();
   const t = useTable(rows, {
     name: (w) => w.name,
@@ -76,7 +76,7 @@ function WorkersTable({ rows }: { rows: W[] }) {
               <Table.Cell><Flex gap="1" wrap="wrap">{w.skills.map((s) => <Badge key={s} color="gray">{s}</Badge>)}</Flex></Table.Cell>
               <Table.Cell>{w.contractType}</Table.Cell>
               <Table.Cell><ComplianceBadge status={w.compliance} /></Table.Cell>
-              <Table.Cell><Text color={w.weekHours > WTR_MAX_HOURS * 0.85 ? "red" : undefined}>{fmtHours(w.weekHours)}</Text> <Text size="1" color="gray">/ {WTR_MAX_HOURS}h</Text></Table.Cell>
+              <Table.Cell><Text color={w.weekHours > maxWeekly * 0.85 ? "red" : undefined}>{fmtHours(w.weekHours)}</Text> <Text size="1" color="gray">/ {maxWeekly}h</Text></Table.Cell>
               <Table.Cell>{w.reliability}%</Table.Cell>
             </Table.Row>
           ))}

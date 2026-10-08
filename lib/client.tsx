@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { useAppStore, type SessionUser } from "./store";
+import { useAppStore, type Brand, type SessionUser } from "./store";
 import type { Role } from "./types";
 
 export type { SessionUser } from "./store";
@@ -16,36 +16,6 @@ export const ROLE_LABEL: Record<Role, string> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100";
 const WEB_API = `${API_URL}/web/v1`;
-
-/** Pages already served by the real API. Everything else still uses the in-app dummy API until migrated. */
-const MIGRATED = [
-  /^\/dashboard(?:[/?]|$)/,
-  /^\/workers(?:[/?]|$)/,
-  /^\/clients(?:[/?]|$)/,
-  /^\/sites(?:[/?]|$)/,
-  /^\/shifts(?:[/?]|$)/,
-  /^\/attendance(?:[/?]|$)/,
-  /^\/timesheets(?:[/?]|$)/,
-  /^\/ratecards(?:[/?]|$)/,
-  /^\/payroll(?:[/?]|$)/,
-  /^\/roles(?:[/?]|$)/,
-  /^\/config\//,
-  /^\/documents(?:[/?]|$)/,
-  /^\/leave(?:[/?]|$)/,
-  /^\/conversations(?:[/?]|$)/,
-  /^\/reports(?:[/?]|$)/,
-  /^\/invoices(?:[/?]|$)/,
-  /^\/tenants?(?:[/?]|$)/,
-  /^\/users(?:[/?]|$)/,
-  /^\/audit(?:[/?]|$)/,
-];
-
-/**
- * Prefix a path with "dummy:" to force the in-app dummy API even when the path is migrated.
- * Used by not-yet-migrated pages whose IDs must match the dummy data (e.g. worker pickers on Leave).
- * ponytail: remove each usage when that page migrates; delete this once MIGRATED covers everything.
- */
-const DUMMY_PREFIX = "dummy:";
 
 // The access token lives only in memory; the refresh token is an httpOnly cookie the API sets.
 let accessToken: string | null = null;
@@ -124,6 +94,7 @@ async function login(tenant: string, email: string, password: string) {
   accessToken = d.accessToken;
   queryClient.clear();
   useAppStore.getState().setSession(d.user);
+  loadBrand();
 }
 
 async function logout() {
@@ -138,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshWithRetry().then((u) => {
       // Still unreachable after retries: send to login, which shows a clear error if sign-in also fails.
       useAppStore.getState().setSession(u === "retry" ? null : u);
+      if (u && u !== "retry") loadBrand();
     });
   }, []);
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -149,7 +121,8 @@ export class ApiError extends Error {
   }
 }
 
-async function realApi<T>(path: string, init?: { method?: string; body?: unknown }, retry = true): Promise<T> {
+/** Single place that talks to the API: adds the access token and refreshes the session once on 401. */
+export async function api<T>(path: string, init?: { method?: string; body?: unknown }, retry = true): Promise<T> {
   const res = await fetch(`${WEB_API}${path}`, {
     method: init?.method ?? "GET",
     headers: { "content-type": "application/json", ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) },
@@ -157,7 +130,7 @@ async function realApi<T>(path: string, init?: { method?: string; body?: unknown
   });
   if (res.status === 401) {
     const r = retry ? await refreshWithRetry() : null;
-    if (r && r !== "retry") return realApi<T>(path, init, false);
+    if (r && r !== "retry") return api<T>(path, init, false);
     if (r === "retry") throw new ApiError("Can't reach the server right now. Try again in a moment.", 503);
     endSession();
     throw new ApiError("Your session has expired. Sign in again.", 401);
@@ -168,17 +141,11 @@ async function realApi<T>(path: string, init?: { method?: string; body?: unknown
   return data as T;
 }
 
-/**
- * Download a file (e.g. a CSV export) as the signed-in user and save it with `filename`.
- * Goes to the real API for migrated paths (with the access token, refreshing once on 401), else the dummy API.
- */
-export async function downloadFile(role: Role, path: string, filename: string) {
-  const real = MIGRATED.some((r) => r.test(path));
-  const get = () => real
-    ? fetch(`${WEB_API}${path}`, { headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {} })
-    : fetch(`/api${path}`, { headers: { "x-role": role } });
+/** Download a file (e.g. a CSV export) as the signed-in user and save it with `filename`. Refreshes once on 401. */
+export async function downloadFile(path: string, filename: string) {
+  const get = () => fetch(`${WEB_API}${path}`, { headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {} });
   let res = await get();
-  if (real && res.status === 401 && (await refreshWithRetry()) && accessToken) res = await get();
+  if (res.status === 401 && (await refreshWithRetry()) && accessToken) res = await get();
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
     throw new ApiError(d.error ?? "Download failed", res.status, d.reasons);
@@ -188,19 +155,11 @@ export async function downloadFile(role: Role, path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// Single place that talks to the API: migrated paths go to the real API, the rest to the dummy one.
-export async function api<T>(role: Role, path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  if (path.startsWith(DUMMY_PREFIX)) path = path.slice(DUMMY_PREFIX.length);
-  else if (MIGRATED.some((r) => r.test(path))) return realApi<T>(path, init);
-  // ponytail: dummy API still trusts an x-role header; it goes away as each page migrates.
-  const res = await fetch(`/api${path}`, {
-    method: init?.method ?? "GET",
-    headers: { "content-type": "application/json", "x-role": role },
-    body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new ApiError(data.error ?? "Request failed", res.status, data.reasons);
-  return data as T;
+/** The signed-in agency's white-label branding, into the global store. */
+export function loadBrand() {
+  return api<{ name: string; brandColor: Brand["brandColor"] }>("/tenant")
+    .then((t) => useAppStore.getState().setBrand({ name: t.name, brandColor: t.brandColor }))
+    .catch(() => {});
 }
 
 /**
@@ -213,7 +172,7 @@ export function useApi<T>(path: string | null) {
   const reloadCount = useAppStore((st) => st.reloadCount);
   const q = useQuery<T, ApiError>({
     queryKey: ["api", user?.id, path, reloadCount],
-    queryFn: () => api<T>(user!.role, path!),
+    queryFn: () => api<T>(path!),
     enabled: !!path && !!user,
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === path ? prev : undefined),
   });
@@ -226,15 +185,11 @@ export function useApi<T>(path: string | null) {
 
 /** Returns a function that sends a mutation. Any successful save marks every cached query stale. */
 export function useSend() {
-  const { role } = useRole();
-  return useCallback(
-    async <T,>(path: string, method: string, body?: unknown) => {
-      const res = await api<T>(role, path, { method, body });
-      await queryClient.invalidateQueries({ queryKey: ["api"] });
-      return res;
-    },
-    [role],
-  );
+  return useCallback(async <T,>(path: string, method: string, body?: unknown) => {
+    const res = await api<T>(path, { method, body });
+    await queryClient.invalidateQueries({ queryKey: ["api"] });
+    return res;
+  }, []);
 }
 
 // The agency works in UK time: shift times show as Europe/London whatever the viewer's zone.

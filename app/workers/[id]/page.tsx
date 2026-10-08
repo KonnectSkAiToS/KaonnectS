@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Badge, Box, Button, Callout, Card, DataList, Dialog, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
 import { ArrowLeftIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import { ApiError, fmtDate, fmtHours, fmtTime, useApi, useRole, useRoles, useSend } from "@/lib/client";
+import { ApiError, fmtDate, fmtHours, fmtTime, useApi, useRole, useRoles, useSend, useSettings } from "@/lib/client";
 import { WorkerCalendar } from "@/components/WorkerCalendar";
 import { ComplianceBadge, Empty, ErrorCallout, Load, PageHeader, ShiftBadge, StatusBadge } from "@/components/ui";
-import { WTR_MAX_HOURS } from "@/lib/rules";
 import type { ComplianceStatus, DocType, LeaveBalance, LeaveRequest, ShiftView, Worker, WorkerDocument } from "@/lib/types";
 
 interface Detail {
@@ -18,6 +17,7 @@ interface Detail {
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function WorkerPage() {
+  const maxWeekly = useSettings().get("booking.maxWeeklyHours", 48); // Configuration → Booking rules
   const { id } = useParams<{ id: string }>();
   const { data, error, reload } = useApi<Detail>(`/workers/${id}`);
   const { role } = useRole();
@@ -51,8 +51,8 @@ export default function WorkerPage() {
                 <Heading size="2" mb="2">Availability</Heading>
                 <Flex gap="1" mb="4">{DAYS.map((d) => <Badge key={d} color={w.availableDays.includes(d) ? "green" : "gray"} variant={w.availableDays.includes(d) ? "solid" : "soft"}>{d}</Badge>)}</Flex>
                 <Heading size="2" mb="2">Hours this week</Heading>
-                <div className="bar"><span style={{ width: `${Math.min(100, (weekHours / WTR_MAX_HOURS) * 100)}%`, background: weekHours > WTR_MAX_HOURS * 0.85 ? "var(--red-9)" : undefined }} /></div>
-                <Text size="1" color="gray">{fmtHours(weekHours)} of {WTR_MAX_HOURS}h Working Time Regulations limit</Text>
+                <div className="bar"><span style={{ width: `${Math.min(100, (weekHours / maxWeekly) * 100)}%`, background: weekHours > maxWeekly * 0.85 ? "var(--red-9)" : undefined }} /></div>
+                <Text size="1" color="gray">{fmtHours(weekHours)} of {maxWeekly}h weekly cap</Text>
                 <Heading size="2" mt="4" mb="2">Holiday</Heading>
                 {leaveBalance.eligible
                   ? <Text size="2">{leaveBalance.remainingHours}h remaining <Text color="gray">({leaveBalance.accruedHours}h accrued, {leaveBalance.usedHours}h used)</Text></Text>
