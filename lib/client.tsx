@@ -33,6 +33,7 @@ const MIGRATED = [
   /^\/documents(?:[/?]|$)/,
   /^\/leave(?:[/?]|$)/,
   /^\/conversations(?:[/?]|$)/,
+  /^\/reports(?:[/?]|$)/,
 ];
 
 /**
