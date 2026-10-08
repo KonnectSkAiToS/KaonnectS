@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Theme } from "@radix-ui/themes";
+import { api } from "@/lib/client";
 import { STORE_KEY, useAppStore, type Brand, type ThemeMode } from "@/lib/store";
 
 export type { Brand, ThemeMode } from "@/lib/store";
@@ -15,7 +16,7 @@ export function useThemeMode() {
   const setMode = useAppStore((s) => s.setThemeMode);
   const brand = useAppStore((s) => s.brand) ?? initial;
   const reloadBrand = useCallback(() => {
-    fetch("/api/tenant").then((r) => r.json())
+    api<Brand>(useAppStore.getState().user?.role ?? "client_admin", "/tenant")
       .then((t) => useAppStore.getState().setBrand({ name: t.name, brandColor: t.brandColor }))
       .catch(() => {});
   }, []);

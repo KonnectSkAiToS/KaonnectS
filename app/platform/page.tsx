@@ -1,14 +1,18 @@
 "use client";
 import { useState } from "react";
-import { Badge, Box, Button, Callout, Card, Dialog, Flex, Grid, Heading, Select, Table, Text, TextField } from "@radix-ui/themes";
-import { InfoCircledIcon, PlusIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Card, Dialog, Flex, Grid, Heading, Select, Table, Text, TextField } from "@radix-ui/themes";
+import { PlusIcon } from "@radix-ui/react-icons";
 import { ApiError, fmtDate, fmtMoney, useApi, useSend } from "@/lib/client";
 import { ErrorCallout, Load, PageHeader } from "@/components/ui";
 import { useThemeMode } from "@/components/AppTheme";
 import type { Plan, Tenant } from "@/lib/types";
 
 type Row = Tenant & { current: boolean; monthlyPrice: number; usage: { workers: number; sites: number } };
-interface Current extends Tenant { usage: { workers: number; sites: number }; limits: { workers: number | null; sites: number | null } }
+interface Current extends Tenant {
+  usage: { workers: number; sites: number };
+  limits: { workers: number | null; sites: number | null };
+  canManagePlatform: boolean; // Super Admin of the agency that runs the platform
+}
 
 const COLORS: Tenant["brandColor"][] = ["indigo", "teal", "crimson", "amber", "violet", "green", "blue", "orange"];
 const PLANS: Plan[] = ["starter", "growth", "enterprise"];
@@ -16,14 +20,15 @@ const STATUS_COLOR = { active: "green", trial: "amber", suspended: "red" } as co
 
 export default function PlatformPage() {
   const { reloadBrand } = useThemeMode();
-  const tenants = useApi<Row[]>("/tenants");
   const current = useApi<Current>("/tenant");
+  const platform = !!current.data?.canManagePlatform;
+  const tenants = useApi<Row[]>(platform ? "/tenants" : null);
   const reload = () => { tenants.reload(); current.reload(); reloadBrand(); };
 
   return (
     <>
       <PageHeader title="Platform & Tenants" subtitle="White-label the platform: each agency gets its own branding, domain, plan and isolated data.">
-        <ProvisionTenant onCreated={reload} />
+        {platform && <ProvisionTenant onCreated={reload} />}
       </PageHeader>
 
       <Load data={current.data} error={current.error}>
@@ -35,7 +40,7 @@ export default function PlatformPage() {
                 <Heading size="5">{t.name}</Heading>
                 <Text size="2" color="gray">{t.domain} · {t.plan} plan</Text>
               </Box>
-              <EditTenant tenant={t} label="Edit branding & plan" onSaved={reload} />
+              <EditTenant tenant={t} label={platform ? "Edit branding & plan" : "Edit branding"} platform={platform} onSaved={reload} />
             </Flex>
             <Grid columns={{ initial: "1", sm: "2" }} gap="4" mt="4">
               <Usage label="Workers" used={t.usage.workers} limit={t.limits.workers} />
@@ -45,12 +50,7 @@ export default function PlatformPage() {
         )}
       </Load>
 
-      <Callout.Root size="1" mb="3">
-        <Callout.Icon><InfoCircledIcon /></Callout.Icon>
-        <Callout.Text>Demo: only this portal's agency has data. In production every table carries a tenant ID and Postgres row-level security keeps each agency's data separate.</Callout.Text>
-      </Callout.Root>
-
-      <Load data={tenants.data} error={tenants.error}>
+      {platform && <Load data={tenants.data} error={tenants.error}>
         {(rows) => (
           <Card style={{ overflowX: "auto" }}>
             <Table.Root size="1">
@@ -74,14 +74,14 @@ export default function PlatformPage() {
                     <Table.Cell><Text size="1">{t.usage.workers} workers · {t.usage.sites} sites</Text></Table.Cell>
                     <Table.Cell><Badge color={STATUS_COLOR[t.status]}>{t.status}</Badge></Table.Cell>
                     <Table.Cell>{fmtDate(t.createdAt)}</Table.Cell>
-                    <Table.Cell><EditTenant tenant={t} label="Edit" onSaved={reload} /></Table.Cell>
+                    <Table.Cell><EditTenant tenant={t} label="Edit" platform onSaved={reload} /></Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>
             </Table.Root>
           </Card>
         )}
-      </Load>
+      </Load>}
     </>
   );
 }
@@ -109,7 +109,7 @@ function ColorPicker({ value, onChange }: { value: Tenant["brandColor"]; onChang
   );
 }
 
-function EditTenant({ tenant, label, onSaved }: { tenant: Tenant; label: string; onSaved: () => void }) {
+function EditTenant({ tenant, label, platform, onSaved }: { tenant: Tenant; label: string; platform: boolean; onSaved: () => void }) {
   const send = useSend();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<ApiError>();
@@ -118,7 +118,9 @@ function EditTenant({ tenant, label, onSaved }: { tenant: Tenant; label: string;
   async function save(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await send(`/tenants/${tenant.id}`, "PATCH", f);
+      // Only the platform team may change plan, status or domain.
+      const { name, brandColor } = f;
+      await send(`/tenants/${tenant.id}`, "PATCH", platform ? f : { name, brandColor });
       setOpen(false);
       onSaved();
     } catch (err) {
@@ -138,9 +140,9 @@ function EditTenant({ tenant, label, onSaved }: { tenant: Tenant; label: string;
         <form onSubmit={save}>
           <Flex direction="column" gap="3">
             <label><Text as="div" size="2" weight="medium" mb="1">Agency name</Text><TextField.Root value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
-            <label><Text as="div" size="2" weight="medium" mb="1">Custom domain</Text><TextField.Root value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value.toLowerCase() })} /></label>
+            {platform && <label><Text as="div" size="2" weight="medium" mb="1">Custom domain</Text><TextField.Root value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value.toLowerCase() })} /></label>}
             <div><Text as="div" size="2" weight="medium" mb="1">Brand colour</Text><ColorPicker value={f.brandColor} onChange={(brandColor) => setF({ ...f, brandColor })} /></div>
-            <Flex gap="3">
+            {platform && <Flex gap="3">
               <label style={{ flex: 1 }}>
                 <Text as="div" size="2" weight="medium" mb="1">Plan</Text>
                 <Select.Root value={f.plan} onValueChange={(plan) => setF({ ...f, plan: plan as Plan })}>
@@ -155,7 +157,7 @@ function EditTenant({ tenant, label, onSaved }: { tenant: Tenant; label: string;
                   <Select.Content>{(["active", "trial", "suspended"] as const).map((s) => <Select.Item key={s} value={s}>{s}</Select.Item>)}</Select.Content>
                 </Select.Root>
               </label>
-            </Flex>
+            </Flex>}
           </Flex>
           <Flex gap="3" mt="5" justify="end">
             <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
@@ -192,7 +194,7 @@ function ProvisionTenant({ onCreated }: { onCreated: () => void }) {
       <Dialog.Trigger><Button><PlusIcon /> New agency</Button></Dialog.Trigger>
       <Dialog.Content maxWidth="460px">
         <Dialog.Title>Set up a new agency</Dialog.Title>
-        <Dialog.Description size="2" color="gray" mb="4">Starts on a trial. The admin gets an invite email to set up their account.</Dialog.Description>
+        <Dialog.Description size="2" color="gray" mb="4">Starts on a trial with default settings. The admin is added as an invited Super Admin.</Dialog.Description>
         <ErrorCallout error={error} />
         <form onSubmit={submit}>
           <Flex direction="column" gap="3">
