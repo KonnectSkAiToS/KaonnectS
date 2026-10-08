@@ -2,15 +2,11 @@
 import { useEffect, useState } from "react";
 import { Button, Checkbox, Dialog, Flex, SegmentedControl, Select, Text, TextArea, TextField } from "@radix-ui/themes";
 import { PlusIcon } from "@radix-ui/react-icons";
-import { ApiError, addDays, ukDate, useApi, useSend } from "@/lib/client";
+import { ApiError, addDays, ukDate, useApi, useRoles, useSend } from "@/lib/client";
 import { ErrorCallout } from "@/components/ui";
 import { SearchSelect } from "@/components/SearchSelect";
-import type { Client, Site, Skill } from "@/lib/types";
+import type { Client, Site } from "@/lib/types";
 
-export const SKILLS: Record<Client["sector"], Skill[]> = {
-  care: ["Carer", "Senior Carer", "Nurse"],
-  hospitality: ["Kitchen Porter", "Waiting Staff", "Housekeeping", "Chef"],
-};
 // Common shift patterns; "custom" keeps whatever times are typed.
 const PRESETS: Record<string, [string, string]> = { early: ["07:00", "15:00"], late: ["14:00", "22:00"], long: ["08:00", "20:00"], night: ["21:00", "07:00"] };
 
@@ -27,6 +23,7 @@ export function NewShiftDialog({ onCreated, open: openProp, onOpenChange, defaul
 }) {
   const { data: clients } = useApi<(Client & { sites: Site[] })[]>("/clients");
   const send = useSend();
+  const { forSector } = useRoles();
   const [ownOpen, setOwnOpen] = useState(false);
   const open = openProp ?? ownOpen;
   const setOpen = onOpenChange ?? setOwnOpen;
@@ -73,7 +70,7 @@ export function NewShiftDialog({ onCreated, open: openProp, onOpenChange, defaul
               <Text as="div" size="2" weight="medium" mb="1">Role</Text>
               <Select.Root value={f.role} onValueChange={(role) => set({ role })} disabled={!sector}>
                 <Select.Trigger placeholder={sector ? "Choose role" : "Choose a site first"} style={{ width: "100%" }} />
-                <Select.Content>{(sector ? SKILLS[sector] : []).map((s) => <Select.Item key={s} value={s}>{s}</Select.Item>)}</Select.Content>
+                <Select.Content>{(sector ? forSector(sector) : []).map((s) => <Select.Item key={s} value={s}>{s}</Select.Item>)}</Select.Content>
               </Select.Root>
             </label>
             <label>

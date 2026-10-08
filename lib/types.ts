@@ -1,13 +1,7 @@
 export type Role = "super_admin" | "coordinator" | "client_admin";
 
-export type Skill =
-  | "Carer"
-  | "Senior Carer"
-  | "Nurse"
-  | "Kitchen Porter"
-  | "Waiting Staff"
-  | "Housekeeping"
-  | "Chef";
+/** A job role name. Roles are configured per agency under Settings → Roles. */
+export type Skill = string;
 
 export type DocType =
   | "Right to Work"
@@ -302,4 +296,17 @@ export interface RetentionRule {
   category: string;
   months: number;
   basis: string; // what the period counts from
+}
+
+// ---- Configuration ----
+
+export interface JobRole {
+  id: string;
+  name: string;
+  sector: "care" | "hospitality" | "any";
+  description: string | null;
+  requiredDocs: string[];
+  defaultPayRate: number | null;
+  active: boolean;
+  usage: { workers: number; upcomingShifts: number; rateCards: number };
 }

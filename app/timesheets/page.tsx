@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
-import { Badge, Button, Card, Dialog, Flex, Grid, Select, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Card, Dialog, Flex, Grid, Select, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { MIN_PAY_RATE } from "@/lib/rules";
-import { DownloadIcon } from "@radix-ui/react-icons";
-import { ApiError, fmtDate, fmtHours, fmtMoney, useApi, useRole, useSend } from "@/lib/client";
+import { DownloadIcon, PlusIcon } from "@radix-ui/react-icons";
+import { SearchSelect } from "@/components/SearchSelect";
+import { ApiError, downloadFile, ukDate, fmtDate, fmtHours, fmtMoney, useApi, useRole, useRoles, useSend } from "@/lib/client";
+import Link from "next/link";
 import { Empty, ErrorCallout, Load, PageHeader, StatusBadge } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
-import type { PayrollConnection, PayrollProvider, PayrollSync as PayrollSyncRecord, RateCard, Role, Timesheet } from "@/lib/types";
+import type { Client, PayrollConnection, PayrollProvider, PayrollSync as PayrollSyncRecord, RateCard, Role, Timesheet } from "@/lib/types";
 
 type TS = Timesheet & { workerName: string; siteName: string };
 
@@ -27,12 +29,11 @@ export default function TimesheetsPage() {
   }
 
   async function exportCsv() {
-    const res = await fetch("/api/timesheets/export", { headers: { "x-role": role } });
-    if (!res.ok) return setActionError(new ApiError("Export failed", res.status));
-    const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: `payrun-${new Date().toISOString().slice(0, 10)}.csv` });
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      await downloadFile(role, "/timesheets/export", `payrun-${ukDate(new Date())}.csv`);
+    } catch (e) {
+      setActionError(e as ApiError);
+    }
   }
 
   return (
@@ -193,19 +194,20 @@ function RateCards() {
   return (
     <Load data={data} error={error}>
       {(rates) => {
-        const clients = [...new Set(rates.map((r) => r.clientName))];
-        const rows = rates.filter((r) => client === "all" || r.clientName === client);
+        const clients = [...new Map(rates.map((r) => [r.clientId, r.clientName])).entries()];
+        const rows = rates.filter((r) => client === "all" || r.clientId === client);
         return (
           <Flex direction="column" gap="3" mt="3">
-            <Flex gap="3" align="center" wrap="wrap">
-              <Select.Root value={client} onValueChange={setClient}>
-                <Select.Trigger />
-                <Select.Content>
-                  <Select.Item value="all">All clients</Select.Item>
-                  {clients.map((c) => <Select.Item key={c} value={c}>{c}</Select.Item>)}
-                </Select.Content>
-              </Select.Root>
-              {role === "super_admin" && <Text size="1" color="gray">Changes apply to shifts posted from now on. Existing shifts keep their rate.</Text>}
+            <Flex gap="3" align="center" justify="between" wrap="wrap">
+              <Flex gap="3" align="center" wrap="wrap">
+                <Box style={{ width: 280 }}>
+                  <SearchSelect noun="client" value={client} onChange={setClient}
+                    options={[{ id: "all", label: "All clients", hint: `${rates.length} rates` },
+                      ...clients.map(([id, name]) => ({ id, label: name, hint: `${rates.filter((r) => r.clientId === id).length} rates` }))]} />
+                </Box>
+                {role === "super_admin" && <Text size="1" color="gray">Changes apply to shifts posted from now on. Existing shifts keep their rate.</Text>}
+              </Flex>
+              {role === "super_admin" && <AddRateCard defaultClientId={client === "all" ? "" : client} onSaved={reload} />}
             </Flex>
             <Card style={{ overflowX: "auto" }}>
               <Table.Root size="1">
@@ -234,6 +236,84 @@ function RateCards() {
         );
       }}
     </Load>
+  );
+}
+
+const DAY_TYPES = { weekday: "Weekday", weekend: "Weekend", night: "Night (starts 20:00 or later)" } as const;
+const STANDARD_MARGIN = 1.32;
+
+/** Add a rate for a client / role / day type with no rate yet (e.g. a care client that now needs a Kitchen Porter). */
+function AddRateCard({ defaultClientId, onSaved }: { defaultClientId: string; onSaved: () => void }) {
+  const send = useSend();
+  const { data: clients } = useApi<Client[]>("/clients");
+  const { forSector } = useRoles();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<ApiError>();
+  const blank = () => ({ clientId: defaultClientId, role: "", dayType: "weekday" as keyof typeof DAY_TYPES, payRate: "", billRate: "" });
+  const [f, setF] = useState(blank);
+  const pay = Number(f.payRate), bill = Number(f.billRate);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await send("/ratecards", "POST", { clientId: f.clientId, role: f.role, dayType: f.dayType, payRate: pay, billRate: bill });
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(err as ApiError);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) setF(blank()); }}>
+      <Dialog.Trigger><Button><PlusIcon /> Add rate card</Button></Dialog.Trigger>
+      <Dialog.Content maxWidth="440px">
+        <Dialog.Title>Add rate card</Dialog.Title>
+        <Dialog.Description size="2" color="gray" mb="3">One rate per client, role and day type. Shifts use it from now on.</Dialog.Description>
+        <ErrorCallout error={error} />
+        <form onSubmit={save}>
+          <Flex direction="column" gap="3">
+            <label>
+              <Text as="div" size="2" weight="medium" mb="1">Client</Text>
+              <SearchSelect noun="client" placeholder="Choose client" value={f.clientId} onChange={(clientId) => setF({ ...f, clientId })}
+                options={clients?.map((c) => ({ id: c.id, label: c.name, hint: c.sector })) ?? []} />
+            </label>
+            <Flex gap="3">
+              <label style={{ flex: 1 }}>
+                <Text as="div" size="2" weight="medium" mb="1">Role</Text>
+                <SearchSelect noun="role" placeholder="Choose role" value={f.role} onChange={(role) => setF({ ...f, role })}
+                  options={forSector().map((r) => ({ id: r, label: r }))} />
+                <Text size="1"><Link href="/settings?tab=roles">Manage roles</Link></Text>
+              </label>
+              <label style={{ flex: 1 }}>
+                <Text as="div" size="2" weight="medium" mb="1">Day type</Text>
+                <Select.Root value={f.dayType} onValueChange={(d) => setF({ ...f, dayType: d as keyof typeof DAY_TYPES })}>
+                  <Select.Trigger style={{ width: "100%" }} />
+                  <Select.Content>{Object.entries(DAY_TYPES).map(([k, v]) => <Select.Item key={k} value={k}>{v}</Select.Item>)}</Select.Content>
+                </Select.Root>
+              </label>
+            </Flex>
+            <Flex gap="3">
+              <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Pay rate (£/h)</Text>
+                <TextField.Root type="number" step="0.01" min={MIN_PAY_RATE} value={f.payRate}
+                  onChange={(e) => setF({ ...f, payRate: e.target.value, billRate: f.billRate || !e.target.value ? f.billRate : (Number(e.target.value) * STANDARD_MARGIN).toFixed(2) })} />
+              </label>
+              <label style={{ flex: 1 }}><Text as="div" size="2" weight="medium" mb="1">Bill rate (£/h)</Text>
+                <TextField.Root type="number" step="0.01" value={f.billRate} onChange={(e) => setF({ ...f, billRate: e.target.value })} />
+              </label>
+            </Flex>
+            {pay > 0 && bill > 0 && (
+              <Text size="2" color={bill < pay ? "red" : undefined}>Margin {fmtMoney(bill - pay)}/h ({Math.round(((bill - pay) / bill) * 100)}%)</Text>
+            )}
+            <Text size="1" color="gray">Minimum pay rate £{MIN_PAY_RATE.toFixed(2)}/h. Bill rate is pre-filled at the standard 32% uplift.</Text>
+          </Flex>
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close><Button type="button" variant="soft" color="gray">Cancel</Button></Dialog.Close>
+            <Button type="submit" disabled={!f.clientId || !f.role || !(pay > 0) || !(bill > 0)}>Add rate</Button>
+          </Flex>
+        </form>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }
 

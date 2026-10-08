@@ -1,8 +1,10 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { RolesSettings } from "@/components/RolesSettings";
 import { Badge, Button, Card, Dialog, Flex, Select, Switch, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from "@radix-ui/react-icons";
-import { ApiError, ROLE_LABEL, fmtDate, fmtDateTime, useApi, useAuth, useRole, useSend } from "@/lib/client";
+import { ApiError, downloadFile, ukDate, ROLE_LABEL, fmtDate, fmtDateTime, useApi, useAuth, useRole, useSend } from "@/lib/client";
 import { ErrorCallout, Load, PageHeader } from "@/components/ui";
 import { Pager, SortHeader, useTable } from "@/components/table";
 import type { AuditEntry, Client, NotificationTemplate, RetentionRule, Role, Site, User } from "@/lib/types";
@@ -14,17 +16,27 @@ const ROLES: Role[] = ["super_admin", "coordinator", "client_admin"];
 const STATUS_COLOR = { active: "green", invited: "amber", deactivated: "gray" } as const;
 
 export default function SettingsPage() {
+  return <Suspense><Settings /></Suspense>;
+}
+
+const TABS = ["users", "roles", "templates", "retention", "audit"];
+
+function Settings() {
+  const params = useSearchParams();
+  const tab = TABS.includes(params.get("tab") ?? "") ? params.get("tab")! : "users";
   return (
     <>
-      <PageHeader title="Settings & Audit" subtitle="Portal users, notification messages, data retention and the audit trail." />
-      <Tabs.Root defaultValue="users">
+      <PageHeader title="Settings & Audit" subtitle="Portal users, job roles, notification messages, data retention and the audit trail." />
+      <Tabs.Root defaultValue={tab}>
         <Tabs.List>
-          <Tabs.Trigger value="users">Users & roles</Tabs.Trigger>
+          <Tabs.Trigger value="users">Users</Tabs.Trigger>
+          <Tabs.Trigger value="roles">Job roles</Tabs.Trigger>
           <Tabs.Trigger value="templates">Notifications</Tabs.Trigger>
           <Tabs.Trigger value="retention">Data retention</Tabs.Trigger>
           <Tabs.Trigger value="audit">Audit log</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="users"><Users /></Tabs.Content>
+        <Tabs.Content value="roles"><RolesSettings /></Tabs.Content>
         <Tabs.Content value="templates"><Templates /></Tabs.Content>
         <Tabs.Content value="retention"><Retention /></Tabs.Content>
         <Tabs.Content value="audit"><Audit /></Tabs.Content>
@@ -334,11 +346,11 @@ function Audit() {
 
   async function exportCsv() {
     const params = new URLSearchParams(Object.entries(range).filter(([, v]) => v));
-    const res = await fetch(`/api/audit/export?${params}`, { headers: { "x-role": role } });
-    if (!res.ok) return setExportError(new ApiError("Export failed", res.status));
-    const url = URL.createObjectURL(await res.blob());
-    Object.assign(document.createElement("a"), { href: url, download: `audit-log-${new Date().toISOString().slice(0, 10)}.csv` }).click();
-    URL.revokeObjectURL(url);
+    try {
+      await downloadFile(role, `/audit/export?${params}`, `audit-log-${ukDate(new Date())}.csv`);
+    } catch (e) {
+      setExportError(e as ApiError);
+    }
   }
 
   return (

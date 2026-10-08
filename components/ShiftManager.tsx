@@ -5,10 +5,9 @@ import {
   Badge, Box, Button, Callout, Card, Checkbox, DataList, Dialog, Flex, Grid, Heading, Select, Switch, Table, Text, TextArea, TextField,
 } from "@radix-ui/themes";
 import { InfoCircledIcon, LockClosedIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
-import { ApiError, fmtDate, fmtDateTime, fmtHours, fmtMoney, fmtTime, ukDate, useApi, useRole, useSend } from "@/lib/client";
+import { ApiError, fmtDate, fmtDateTime, fmtHours, fmtMoney, fmtTime, ukDate, useApi, useRole, useRoles, useSend } from "@/lib/client";
 import { ErrorCallout, Load, ShiftBadge, StatusBadge } from "@/components/ui";
 import { ReloadButton } from "@/components/ReloadButton";
-import { SKILLS } from "@/app/shifts/NewShiftDialog";
 import type { ShiftView } from "@/lib/types";
 
 type Shift = ShiftView & { notes: string | null };
@@ -192,7 +191,9 @@ function EditShift({ shift, onSaved }: { shift: Shift; onSaved: () => void }) {
   const [error, setError] = useState<ApiError>();
   const init = () => ({ date: ukDate(shift.start), startTime: fmtTime(shift.start), endTime: fmtTime(shift.end), role: shift.role as string, urgent: shift.urgent, notes: shift.notes ?? "" });
   const [f, setF] = useState(init);
-  const roles: string[] = Object.values(SKILLS).find((list) => list.includes(shift.role)) ?? [shift.role];
+  const { forSector } = useRoles();
+  // Active roles plus the shift's current one (which may since have been deactivated).
+  const roles = [...new Set([shift.role, ...forSector()])];
   const blockedWorker = error?.status === 422 && !!shift.workerId;
 
   async function save(unassignIfBlocked = false) {

@@ -9,8 +9,10 @@ export interface Option { id: string; label: string; hint?: string }
  * Searchable checkbox list for picking many items out of a long list (50+ clients, sites, workers).
  * "Select all" / "Clear" apply to what the search currently shows.
  */
-export function MultiSelect({ options, value, onChange, noun = "item", height = 240 }: {
+export function MultiSelect({ options, value, onChange, noun = "item", height = 240, allowEmpty = false }: {
   options: Option[]; value: string[]; onChange: (ids: string[]) => void; noun?: string; height?: number;
+  /** When true, selecting nothing is valid (no "select at least one" prompt). */
+  allowEmpty?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
@@ -65,8 +67,8 @@ export function MultiSelect({ options, value, onChange, noun = "item", height = 
       </ScrollArea>
 
       <Box p="2" style={{ borderTop: "1px solid var(--gray-a5)" }}>
-        <Text as="div" size="1" color={value.length ? undefined : "red"} mb={value.length ? "2" : "0"}>
-          {value.length ? `${plural(value.length)} selected` : `Select at least one ${noun}`}
+        <Text as="div" size="1" color={value.length || allowEmpty ? undefined : "red"} mb={value.length ? "2" : "0"}>
+          {value.length ? `${plural(value.length)} selected` : allowEmpty ? `No ${noun}s selected` : `Select at least one ${noun}`}
         </Text>
         {value.length > 0 && (
           <Flex gap="1" wrap="wrap" style={{ maxHeight: 64, overflowY: "auto" }}>

@@ -25,6 +25,10 @@ const MIGRATED = [
   /^\/sites(?:[/?]|$)/,
   /^\/shifts(?:[/?]|$)/,
   /^\/attendance(?:[/?]|$)/,
+  /^\/timesheets(?:[/?]|$)/,
+  /^\/ratecards(?:[/?]|$)/,
+  /^\/payroll(?:[/?]|$)/,
+  /^\/roles(?:[/?]|$)/,
 ];
 
 /**
@@ -155,6 +159,26 @@ async function realApi<T>(path: string, init?: { method?: string; body?: unknown
   return data as T;
 }
 
+/**
+ * Download a file (e.g. a CSV export) as the signed-in user and save it with `filename`.
+ * Goes to the real API for migrated paths (with the access token, refreshing once on 401), else the dummy API.
+ */
+export async function downloadFile(role: Role, path: string, filename: string) {
+  const real = MIGRATED.some((r) => r.test(path));
+  const get = () => real
+    ? fetch(`${WEB_API}${path}`, { headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {} })
+    : fetch(`/api${path}`, { headers: { "x-role": role } });
+  let res = await get();
+  if (real && res.status === 401 && (await refreshWithRetry()) && accessToken) res = await get();
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new ApiError(d.error ?? "Download failed", res.status, d.reasons);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement("a"), { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
+}
+
 // Single place that talks to the API: migrated paths go to the real API, the rest to the dummy one.
 export async function api<T>(role: Role, path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   if (path.startsWith(DUMMY_PREFIX)) path = path.slice(DUMMY_PREFIX.length);
@@ -237,3 +261,11 @@ export const ukMidnight = (day: string) => {
 export const fmtDateTime = (iso: string) => `${fmtDate(iso)}, ${fmtTime(iso)}`;
 export const fmtMoney = (n?: number) => (n === undefined ? "—" : n.toLocaleString("en-GB", { style: "currency", currency: "GBP" }));
 export const fmtHours = (h: number) => `${Math.round(h * 100) / 100}h`;
+
+/** Configured job roles. `forSector` keeps active roles offered for that client sector (plus "any"). */
+export function useRoles() {
+  const { data, error, reload } = useApi<import("./types").JobRole[]>("/roles");
+  const forSector = (sector?: string) =>
+    (data ?? []).filter((r) => r.active && (!sector || r.sector === "any" || r.sector === sector)).map((r) => r.name);
+  return { roles: data, error, reload, forSector };
+}

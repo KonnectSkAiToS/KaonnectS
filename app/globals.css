@@ -70,3 +70,14 @@ button.chip:focus-visible { outline: 2px solid var(--accent-8); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Worker calendar: Monday-first month grid. */
+.worker-cal { display: grid; grid-template-columns: repeat(7, minmax(96px, 1fr)); gap: 1px; background: var(--gray-a5); border: 1px solid var(--gray-a5); border-radius: var(--radius-3); overflow: hidden; min-width: 700px; }
+.worker-cal > div { background: var(--color-panel-solid); }
+.wc-head { padding: 6px; font-size: var(--font-size-1); font-weight: 600; color: var(--gray-11); background: var(--gray-2) !important; }
+.wc-day { min-height: 92px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.wc-out { background: var(--gray-a2) !important; }
+.wc-today { box-shadow: inset 0 0 0 2px var(--accent-8); }
+.wc-leave { font-size: 10px; line-height: 1.3; padding: 2px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-shift { display: block; font-size: 10px; line-height: 1.3; padding: 2px 4px; border-radius: 3px; border-left: 3px solid; text-decoration: none; }
+.wc-site { opacity: .8; }

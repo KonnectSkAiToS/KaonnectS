@@ -1,10 +1,13 @@
 "use client";
+import { useState } from "react";
+import { MultiSelect } from "@/components/MultiSelect";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Badge, Callout, Card, DataList, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, DataList, Dialog, Flex, Grid, Heading, Table, Text } from "@radix-ui/themes";
 import { ArrowLeftIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import { fmtDate, fmtHours, fmtTime, useApi } from "@/lib/client";
-import { ComplianceBadge, Empty, Load, PageHeader, ShiftBadge, StatusBadge } from "@/components/ui";
+import { ApiError, fmtDate, fmtHours, fmtTime, useApi, useRole, useRoles, useSend } from "@/lib/client";
+import { WorkerCalendar } from "@/components/WorkerCalendar";
+import { ComplianceBadge, Empty, ErrorCallout, Load, PageHeader, ShiftBadge, StatusBadge } from "@/components/ui";
 import { WTR_MAX_HOURS } from "@/lib/rules";
 import { LEAVE_TYPES, type ComplianceStatus, type DocType, type LeaveBalance, type LeaveRequest, type LeaveType, type ShiftView, type Worker, type WorkerDocument } from "@/lib/types";
 
@@ -16,14 +19,18 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function WorkerPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, error } = useApi<Detail>(`/workers/${id}`);
+  const { data, error, reload } = useApi<Detail>(`/workers/${id}`);
+  const { role } = useRole();
   return (
     <>
       <Link href="/workers" style={{ textDecoration: "none" }}><Text size="2" color="gray"><Flex align="center" gap="1" mb="3"><ArrowLeftIcon /> All workers</Flex></Text></Link>
       <Load data={data} error={error}>
         {({ worker: w, compliance, missing, weekHours, documents, shifts, leaveBalance, leave }) => (
           <>
-            <PageHeader title={w.name} subtitle={w.skills.join(" · ")}><ComplianceBadge status={compliance} /></PageHeader>
+            <PageHeader title={w.name} subtitle={w.skills.join(" · ")}>
+              <ComplianceBadge status={compliance} />
+              {role !== "client_admin" && <EditWorkerRoles workerId={w.id} name={w.name} current={w.skills} onSaved={reload} />}
+            </PageHeader>
             {missing.length > 0 && (
               <Callout.Root color="red" mb="4">
                 <Callout.Icon><ExclamationTriangleIcon /></Callout.Icon>
@@ -57,6 +64,8 @@ export default function WorkerPage() {
                 ))}
               </Card>
             </Grid>
+
+            <Box mb="5"><WorkerCalendar workerId={w.id} /></Box>
 
             <Heading size="3" mb="2">Documents</Heading>
             <Card mb="5" style={{ overflowX: "auto" }}>
@@ -101,5 +110,43 @@ export default function WorkerPage() {
         )}
       </Load>
     </>
+  );
+}
+
+/** Agency staff choose which configured roles a worker can be booked for. */
+function EditWorkerRoles({ workerId, name, current, onSaved }: { workerId: string; name: string; current: string[]; onSaved: () => void }) {
+  const send = useSend();
+  const { roles } = useRoles();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<ApiError>();
+  const [skills, setSkills] = useState(current);
+  // Active roles, plus any the worker already has that were since deactivated (so they can be removed).
+  const options = (roles ?? []).filter((r) => r.active || current.includes(r.name))
+    .map((r) => ({ id: r.name, label: r.name, hint: `${r.active ? "" : "inactive · "}${r.requiredDocs.length ? `needs ${r.requiredDocs.length} doc${r.requiredDocs.length === 1 ? "" : "s"}` : "base docs"}` }));
+
+  async function save() {
+    try {
+      await send(`/workers/${workerId}/roles`, "PATCH", { skills });
+      setOpen(false);
+      onSaved();
+    } catch (e) {
+      setError(e as ApiError);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); setError(undefined); if (o) setSkills(current); }}>
+      <Dialog.Trigger><Button variant="soft">Edit roles</Button></Dialog.Trigger>
+      <Dialog.Content maxWidth="460px">
+        <Dialog.Title>Roles for {name}</Dialog.Title>
+        <Dialog.Description size="2" color="gray" mb="3">They can be booked for these roles once they hold each role's required documents. <Link href="/settings?tab=roles">Manage roles</Link></Dialog.Description>
+        <ErrorCallout error={error} />
+        <MultiSelect noun="role" value={skills} onChange={setSkills} options={options} />
+        <Flex gap="3" mt="4" justify="end">
+          <Dialog.Close><Button variant="soft" color="gray">Cancel</Button></Dialog.Close>
+          <Button onClick={save} disabled={!skills.length}>Save</Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }
