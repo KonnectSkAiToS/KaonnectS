@@ -6,6 +6,7 @@ import { Box, Button, Card, Flex, Heading, Separator, Table, Text } from "@radix
 import { ArrowLeftIcon, DownloadIcon } from "@radix-ui/react-icons";
 import { ApiError, fmtDate, fmtMoney, useApi, useRole, useSend } from "@/lib/client";
 import { ErrorCallout, InvoiceBadge, Load } from "@/components/ui";
+import { ReloadButton } from "@/components/ReloadButton";
 import type { Client, Invoice, Tenant } from "@/lib/types";
 
 interface Detail { invoice: Invoice & { overdue: boolean }; client: Client; agency: Tenant }
@@ -39,6 +40,7 @@ export default function InvoicePage() {
             {role === "super_admin" && data.invoice.status === "issued" && <Button color="green" onClick={() => act("mark_paid")}>Mark as paid</Button>}
             {role === "super_admin" && ["draft", "issued"].includes(data.invoice.status) && <Button variant="soft" color="red" onClick={() => act("void")}>Void</Button>}
             <Button variant="soft" onClick={() => window.print()}><DownloadIcon /> Print / save PDF</Button>
+            <ReloadButton />
           </Flex>
         )}
       </Flex>

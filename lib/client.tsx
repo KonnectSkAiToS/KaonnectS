@@ -1,6 +1,10 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useAppStore, type SessionUser } from "./store";
 import type { Role } from "./types";
+
+export type { SessionUser } from "./store";
 
 export const ROLE_LABEL: Record<Role, string> = {
   super_admin: "Super Admin",
@@ -29,12 +33,29 @@ const MIGRATED = [
  */
 const DUMMY_PREFIX = "dummy:";
 
-export interface SessionUser { id: string; name: string; email: string; role: Role; clientIds: string[] | null }
-
 // The access token lives only in memory; the refresh token is an httpOnly cookie the API sets.
 let accessToken: string | null = null;
 let refreshing: Promise<SessionUser | null | "retry"> | null = null;
-let onExpired: () => void = () => {};
+
+/**
+ * Server data cache. Every useApi query is keyed ["api", userId, path, reloadCount]; saves invalidate it
+ * and sign-out clears it, so one user's data is never shown to another.
+ */
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000, // revisiting a page within 30s shows cached data without refetching
+      refetchOnWindowFocus: false,
+      retry: (count, e) => (e as ApiError).status >= 500 && count < 1,
+    },
+  },
+});
+
+function endSession() {
+  accessToken = null;
+  queryClient.clear();
+  useAppStore.getState().setSession(null);
+}
 
 /**
  * Exchanges the refresh cookie for a new access token.
@@ -68,51 +89,44 @@ async function refreshWithRetry(): Promise<SessionUser | null | "retry"> {
   return "retry";
 }
 
-type Status = "loading" | "signed-in" | "signed-out";
-const AuthCtx = createContext<{
-  user: SessionUser | null;
-  status: Status;
-  login: (tenant: string, email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-}>({ user: null, status: "loading", login: async () => {}, logout: async () => {} });
-export const useAuth = () => useContext(AuthCtx);
+/** Session state from the global store plus sign-in / sign-out. */
+export function useAuth() {
+  const user = useAppStore((st) => st.user);
+  const status = useAppStore((st) => st.status);
+  return { user, status, login, logout };
+}
 
 /** Current user's role. Pages only render once signed in; the fallback is the least-privileged role. */
-export const useRole = () => ({ role: useContext(AuthCtx).user?.role ?? ("client_admin" as Role) });
+export const useRole = () => ({ role: useAppStore((st) => st.user?.role) ?? ("client_admin" as Role) });
 
+async function login(tenant: string, email: string, password: string) {
+  const res = await fetch(`${WEB_API}/auth/login`, {
+    method: "POST", credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ tenant, email, password }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(d.error ?? "Sign-in failed", res.status, d.reasons);
+  accessToken = d.accessToken;
+  queryClient.clear();
+  useAppStore.getState().setSession(d.user);
+}
+
+async function logout() {
+  await fetch(`${WEB_API}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+  endSession();
+}
+
+/** App-wide providers: TanStack Query, store rehydration and the session bootstrap. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [status, setStatus] = useState<Status>("loading");
-
   useEffect(() => {
-    onExpired = () => { accessToken = null; cache.clear(); setUser(null); setStatus("signed-out"); };
+    useAppStore.persist.rehydrate(); // theme + sidebar from localStorage, after the first render
     refreshWithRetry().then((u) => {
       // Still unreachable after retries: send to login, which shows a clear error if sign-in also fails.
-      const user = u === "retry" ? null : u;
-      setUser(user);
-      setStatus(user ? "signed-in" : "signed-out");
+      useAppStore.getState().setSession(u === "retry" ? null : u);
     });
   }, []);
-
-  const login = useCallback(async (tenant: string, email: string, password: string) => {
-    const res = await fetch(`${WEB_API}/auth/login`, {
-      method: "POST", credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tenant, email, password }),
-    });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(d.error ?? "Sign-in failed", res.status, d.reasons);
-    accessToken = d.accessToken;
-    setUser(d.user);
-    setStatus("signed-in");
-  }, []);
-
-  const logout = useCallback(async () => {
-    await fetch(`${WEB_API}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
-    onExpired();
-  }, []);
-
-  return <AuthCtx.Provider value={{ user, status, login, logout }}>{children}</AuthCtx.Provider>;
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
 export class ApiError extends Error {
@@ -131,7 +145,7 @@ async function realApi<T>(path: string, init?: { method?: string; body?: unknown
     const r = retry ? await refreshWithRetry() : null;
     if (r && r !== "retry") return realApi<T>(path, init, false);
     if (r === "retry") throw new ApiError("Can't reach the server right now. Try again in a moment.", 503);
-    onExpired();
+    endSession();
     throw new ApiError("Your session has expired. Sign in again.", 401);
   }
   if (res.status === 204) return undefined as T;
@@ -155,39 +169,34 @@ export async function api<T>(role: Role, path: string, init?: { method?: string;
   return data as T;
 }
 
-// In-memory response cache: revisiting a page shows its last data instantly while it refreshes.
-// Keyed by user so switching accounts never shows someone else's data. Cleared after any save and on sign-out.
-// ponytail: unbounded Map, fine for one session; add LRU eviction if memory ever matters.
-const cache = new Map<string, unknown>();
-
+/**
+ * Fetch `path` for the current page. Built on TanStack Query: the key includes the global reloadCount,
+ * so the Reload button (which bumps it) refetches every query on the page. While a reload is in flight
+ * the previous data stays on screen; a different path starts empty so another record never flashes.
+ */
 export function useApi<T>(path: string | null) {
-  const { user } = useAuth();
-  const role = user?.role;
-  const key = path && user ? `${user.id}:${path}` : null;
-  const [data, setData] = useState<T | undefined>(() => (key ? (cache.get(key) as T | undefined) : undefined));
-  const [error, setError] = useState<ApiError>();
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!path || !role || !key) return;
-    let live = true;
-    setError(undefined);
-    if (cache.has(key)) setData(cache.get(key) as T); // stale-while-revalidate
-    api<T>(role, path)
-      .then((d) => { cache.set(key, d); if (live) setData(d); })
-      .catch((e) => live && (setError(e), setData(undefined)));
-    return () => { live = false; };
-  }, [path, role, key, tick]);
-  const reload = useCallback(() => setTick((t) => t + 1), []);
-  return { data, error, reload };
+  const user = useAppStore((st) => st.user);
+  const reloadCount = useAppStore((st) => st.reloadCount);
+  const q = useQuery<T, ApiError>({
+    queryKey: ["api", user?.id, path, reloadCount],
+    queryFn: () => api<T>(user!.role, path!),
+    enabled: !!path && !!user,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === path ? prev : undefined),
+  });
+  const reload = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ["api", user?.id, path] }),
+    [user?.id, path],
+  );
+  return { data: q.data, error: q.error ?? undefined, reload };
 }
 
-/** Returns a function that sends a mutation with the current role. */
+/** Returns a function that sends a mutation. Any successful save marks every cached query stale. */
 export function useSend() {
   const { role } = useRole();
   return useCallback(
     async <T,>(path: string, method: string, body?: unknown) => {
       const res = await api<T>(role, path, { method, body });
-      cache.clear(); // a save can change any list, so nothing cached is trusted afterwards
+      await queryClient.invalidateQueries({ queryKey: ["api"] });
       return res;
     },
     [role],

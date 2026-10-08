@@ -4,6 +4,7 @@ import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import type { ComplianceStatus, Invoice, ShiftStatus } from "@/lib/types";
 import type { ApiError } from "@/lib/client";
 import { NotFound } from "./NotFound";
+import { ReloadButton } from "./ReloadButton";
 
 type Color = React.ComponentProps<typeof Badge>["color"];
 
@@ -34,7 +35,8 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
         <Heading size="6">{title}</Heading>
         {subtitle && <Text as="p" color="gray" size="2" mt="1">{subtitle}</Text>}
       </div>
-      {children && <Flex gap="2" wrap="wrap">{children}</Flex>}
+      {/* Page actions, with Reload always last on the right. */}
+      <Flex gap="2" wrap="wrap" align="center">{children}<ReloadButton /></Flex>
     </Flex>
   );
 }

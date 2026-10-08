@@ -8,6 +8,7 @@ import {
   DesktopIcon, DoubleArrowLeftIcon, DoubleArrowRightIcon, HamburgerMenuIcon, HomeIcon, IdCardIcon, LayersIcon, ListBulletIcon, ReaderIcon, MoonIcon, ExitIcon, PersonIcon, SunIcon,
 } from "@radix-ui/react-icons";
 import { ROLE_LABEL, useAuth } from "@/lib/client";
+import { useAppStore } from "@/lib/store";
 import { useThemeMode, type ThemeMode } from "./AppTheme";
 import type { Role } from "@/lib/types";
 
@@ -56,16 +57,9 @@ function SignedInShell({ user, path, onLogout, children }: {
 }) {
   const role = user.role;
   const [open, setOpen] = useState(false); // mobile drawer
-  const [collapsed, setCollapsed] = useState(false); // desktop icon-only rail
+  const collapsed = useAppStore((s) => s.sidebarCollapsed); // desktop icon-only rail (persisted)
+  const toggleCollapsed = useAppStore((s) => s.toggleSidebar);
   const { mode, setMode, brand } = useThemeMode();
-
-  useEffect(() => {
-    try { setCollapsed(localStorage.getItem("sidebar") === "collapsed"); } catch {}
-  }, []);
-  const toggleCollapsed = () => {
-    setCollapsed(!collapsed);
-    try { localStorage.setItem("sidebar", collapsed ? "expanded" : "collapsed"); } catch {}
-  };
   const allowed = NAV.find((n) => n.href !== "/" && path.startsWith(n.href))?.roles ?? ALL;
 
   return (
@@ -132,3 +126,4 @@ function SignedInShell({ user, path, onLogout, children }: {
     </Flex>
   );
 }
+

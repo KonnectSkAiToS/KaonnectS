@@ -7,6 +7,7 @@ import {
 import { InfoCircledIcon, LockClosedIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { ApiError, fmtDate, fmtDateTime, fmtHours, fmtMoney, fmtTime, ukDate, useApi, useRole, useSend } from "@/lib/client";
 import { ErrorCallout, Load, ShiftBadge, StatusBadge } from "@/components/ui";
+import { ReloadButton } from "@/components/ReloadButton";
 import { SKILLS } from "@/app/shifts/NewShiftDialog";
 import type { ShiftView } from "@/lib/types";
 
@@ -75,6 +76,7 @@ export function ShiftManager({ id, onChanged, compact = false }: { id: string; o
                   <Button variant="soft" color="red" onClick={() => act(`/shifts/${s.id}`, "PATCH", { action: "no_show" })}>Mark no-show</Button>
                 )}
                 {upcoming && <Button color="red" variant="outline" onClick={() => confirm("Cancel this shift?") && act(`/shifts/${s.id}`, "PATCH", { action: "cancel" })}>Cancel shift</Button>}
+                {!compact && <ReloadButton />}
               </Flex>
             </Flex>
 

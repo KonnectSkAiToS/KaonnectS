@@ -66,3 +66,7 @@ button.chip:focus-visible { outline: 2px solid var(--accent-8); }
 
 /* Side panel (sheet) for managing a shift from the rota. */
 .rt-DialogContent.sheet { position: fixed; top: 0; right: 0; height: 100vh; max-height: 100vh; width: min(720px, 100vw); max-width: 100vw; border-radius: 0; margin: 0; overflow-y: auto; animation: none; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

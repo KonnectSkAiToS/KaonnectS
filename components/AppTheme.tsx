@@ -1,21 +1,32 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Theme } from "@radix-ui/themes";
+import { STORE_KEY, useAppStore, type Brand, type ThemeMode } from "@/lib/store";
 
-export type ThemeMode = "light" | "dark" | "system";
-type Accent = React.ComponentProps<typeof Theme>["accentColor"];
-export interface Brand { name: string; brandColor: Accent }
+export type { Brand, ThemeMode } from "@/lib/store";
 
-const Ctx = createContext<{ mode: ThemeMode; setMode: (m: ThemeMode) => void; brand: Brand; reloadBrand: () => void }>({
-  mode: "system", setMode: () => {}, brand: { name: "", brandColor: "indigo" }, reloadBrand: () => {},
-});
-export const useThemeMode = () => useContext(Ctx);
+// Only carries the server-rendered branding, used until the store has its own copy.
+const InitialBrand = createContext<Brand>({ name: "", brandColor: "indigo" });
+
+/** Theme mode + branding from the global store, with sign-in-free fallbacks for the first render. */
+export function useThemeMode() {
+  const initial = useContext(InitialBrand);
+  const mode = useAppStore((s) => s.themeMode);
+  const setMode = useAppStore((s) => s.setThemeMode);
+  const brand = useAppStore((s) => s.brand) ?? initial;
+  const reloadBrand = useCallback(() => {
+    fetch("/api/tenant").then((r) => r.json())
+      .then((t) => useAppStore.getState().setBrand({ name: t.name, brandColor: t.brandColor }))
+      .catch(() => {});
+  }, []);
+  return { mode, setMode, brand, reloadBrand };
+}
 
 /**
  * Runs before first paint (inlined in <head>) so a saved dark theme never flashes light.
- * Radix Themes with appearance="inherit" follows the `dark` / `light` class on <html>.
+ * Reads the persisted global store. Radix Themes with appearance="inherit" follows the class on <html>.
  */
-export const THEME_SCRIPT = `(function(){try{var m=localStorage.getItem("theme")||"system";var d=m==="dark"||(m!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);var h=document.documentElement;h.classList.remove("light","dark");h.classList.add(d?"dark":"light");h.style.colorScheme=d?"dark":"light"}catch(e){}})()`;
+export const THEME_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem(${JSON.stringify(STORE_KEY)})||"{}").state||{};var m=s.themeMode||"system";var d=m==="dark"||(m!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);var h=document.documentElement;h.classList.remove("light","dark");h.classList.add(d?"dark":"light");h.style.colorScheme=d?"dark":"light"}catch(e){}})()`;
 
 function applyAppearance(dark: boolean) {
   const h = document.documentElement;
@@ -25,41 +36,29 @@ function applyAppearance(dark: boolean) {
 }
 
 export function AppTheme({ initialBrand, children }: { initialBrand: Brand; children: React.ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>("system");
+  const mode = useAppStore((s) => s.themeMode);
+  const brand = useAppStore((s) => s.brand) ?? initialBrand;
   const [systemDark, setSystemDark] = useState(false);
-  const [ready, setReady] = useState(false); // don't touch <html> until the saved mode is known
-  const [brand, setBrand] = useState<Brand>(initialBrand);
-
-  // White-label: name and accent colour come from the tenant record (server-rendered first, refetched after edits).
-  const reloadBrand = useCallback(() => {
-    fetch("/api/tenant").then((r) => r.json()).then((t) => setBrand({ name: t.name, brandColor: t.brandColor })).catch(() => {});
-  }, []);
+  // Don't touch <html> until the saved mode is loaded, or a saved dark theme would flip to light.
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("theme") as ThemeMode | null;
-      if (saved === "light" || saved === "dark" || saved === "system") setModeState(saved);
-    } catch {}
+    const done = useAppStore.persist.onFinishHydration(() => setHydrated(true));
+    if (useAppStore.persist.hasHydrated()) setHydrated(true);
     const mq = matchMedia("(prefers-color-scheme: dark)");
     setSystemDark(mq.matches);
-    setReady(true);
     const on = (e: MediaQueryListEvent) => setSystemDark(e.matches);
     mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
+    return () => { done(); mq.removeEventListener("change", on); };
   }, []);
 
   useEffect(() => {
-    if (ready) applyAppearance(mode === "dark" || (mode === "system" && systemDark));
-  }, [ready, mode, systemDark]);
-
-  const setMode = (m: ThemeMode) => {
-    setModeState(m);
-    try { localStorage.setItem("theme", m); } catch {}
-  };
+    if (hydrated) applyAppearance(mode === "dark" || (mode === "system" && systemDark));
+  }, [hydrated, mode, systemDark]);
 
   return (
-    <Ctx.Provider value={{ mode, setMode, brand, reloadBrand }}>
+    <InitialBrand.Provider value={initialBrand}>
       <Theme appearance="inherit" accentColor={brand.brandColor} grayColor="slate" radius="medium">{children}</Theme>
-    </Ctx.Provider>
+    </InitialBrand.Provider>
   );
 }
