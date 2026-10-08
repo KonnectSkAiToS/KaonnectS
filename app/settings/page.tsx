@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useDeferredValue, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge, Button, Card, Dialog, Flex, Select, Switch, Table, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { DownloadIcon, MagnifyingGlassIcon, PlusIcon } from "@radix-ui/react-icons";
@@ -43,7 +43,7 @@ function Settings() {
 function Users() {
   const send = useSend();
   const { data, error, reload } = useApi<U[]>("/users");
-  const { data: clients } = useApi<ClientWithSites[]>("dummy:/clients");
+  const { data: clients } = useApi<ClientWithSites[]>("/clients");
   const [actionError, setActionError] = useState<ApiError>();
 
   async function patch(id: string, b: object) {
@@ -171,9 +171,11 @@ function UserDialog({ user, clients, onSaved }: { user?: U; clients: ClientWithS
 
 function Audit() {
   const { role } = useRole();
-  const { data, error } = useApi<AuditEntry[]>("/audit");
   const [q, setQ] = useState("");
   const [range, setRange] = useState({ from: "", to: "" });
+  // Filtering runs on the server (the log grows forever); deferring keeps typing smooth.
+  const filter = useDeferredValue(new URLSearchParams(Object.entries({ q: q.trim(), ...range }).filter(([, v]) => v)).toString());
+  const { data, error } = useApi<{ entries: AuditEntry[]; truncated: boolean }>(`/audit?${filter}`);
   const [exportError, setExportError] = useState<ApiError>();
 
   async function exportCsv() {
@@ -197,10 +199,11 @@ function Audit() {
       </Flex>
       <ErrorCallout error={exportError} />
       <Load data={data} error={error}>
-        {(rows) => (
-          <AuditTable rows={rows.filter((a) =>
-            `${a.actor} ${a.action} ${a.detail}`.toLowerCase().includes(q.toLowerCase()) &&
-            (!range.from || a.at.slice(0, 10) >= range.from) && (!range.to || a.at.slice(0, 10) <= range.to))} />
+        {(d) => (
+          <>
+            {d.truncated && <Text size="2" color="gray">Showing the latest {d.entries.length} entries. Search, pick dates or export the CSV to see older ones.</Text>}
+            <AuditTable rows={d.entries} />
+          </>
         )}
       </Load>
     </Flex>
